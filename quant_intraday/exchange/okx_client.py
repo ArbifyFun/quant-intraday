@@ -1,4 +1,4 @@
-import os, json, time, base64, hashlib, hmac, httpx
+import os, json, time, base64, hashlib, hmac, httpx, asyncio
 
 OKX_REST = "https://www.okx.com"
 
@@ -62,6 +62,43 @@ class OKXClient:
         if j.get("code") != "0": raise RuntimeError(f"cancel_order error: {j}")
         return j["data"][0]
 
+    def order_algo(self, **kwargs):
+        j = self.post("/api/v5/trade/order-algo", kwargs)
+        if j.get("code") != "0": raise RuntimeError(f"order_algo error: {j}")
+        return j["data"][0]
+
+    def cancel_algo(self, **kwargs):
+        j = self.post("/api/v5/trade/cancel-algos", kwargs)
+        if j.get("code") != "0": raise RuntimeError(f"cancel_algo error: {j}")
+        return j["data"][0]
+
+    def amend_order(self, **kwargs):
+        j = self.post("/api/v5/trade/amend-order", kwargs)
+        if j.get("code") != "0": raise RuntimeError(f"amend_order error: {j}")
+        return j["data"][0]
+
     # low-level (used by attribution/replay)
     def _get(self, path, params=None): return self.get(path, params)
     def _post(self, path, payload): return self.post(path, payload)
+
+    # ---- Async wrappers ----
+    async def get_balance_async(self, ccy="USDT"):
+        return await asyncio.to_thread(self.get_balance, ccy)
+
+    async def get_instrument_async(self, inst_id):
+        return await asyncio.to_thread(self.get_instrument, inst_id)
+
+    async def place_order_async(self, **kwargs):
+        return await asyncio.to_thread(self.place_order, **kwargs)
+
+    async def cancel_order_async(self, **kwargs):
+        return await asyncio.to_thread(self.cancel_order, **kwargs)
+
+    async def order_algo_async(self, **kwargs):
+        return await asyncio.to_thread(self.order_algo, **kwargs)
+
+    async def cancel_algo_async(self, **kwargs):
+        return await asyncio.to_thread(self.cancel_algo, **kwargs)
+
+    async def amend_order_async(self, **kwargs):
+        return await asyncio.to_thread(self.amend_order, **kwargs)
