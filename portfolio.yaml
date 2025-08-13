@@ -1,6 +1,15 @@
-instruments:
-  - { inst: "BTC-USDT-SWAP", tf: "5m", risk_share: 1.0, exec_mode: "autoexec" }
-  - { inst: "ETH-USDT-SWAP", tf: "5m", risk_share: 0.8, exec_mode: "autoexec" }
-  - { inst: "SOL-USDT-SWAP", tf: "5m", risk_share: 0.6, exec_mode: "autoexec" }
-risk_pct: 0.007
 dd_limit: 0.08
+instruments:
+- exec_mode: autoexec
+  inst: BTC-USDT-SWAP
+  risk_share: 1.0
+  tf: 5m
+- exec_mode: autoexec
+  inst: ETH-USDT-SWAP
+  risk_share: 0.8
+  tf: 5m
+- exec_mode: autoexec
+  inst: SOL-USDT-SWAP
+  risk_share: 0.6
+  tf: 5m
+risk_pct: 0.007

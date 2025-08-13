@@ -1,4 +1,6 @@
-import asyncio, time
+import asyncio
+import time
+import os
 
 class ExecOptimizer:
     """Book-aware limit execution with cancel/repost.

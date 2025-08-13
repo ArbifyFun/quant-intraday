@@ -17,7 +17,8 @@ def main():
     try:
         import talib as ta  # noqa
         res["ta_lib"] = "ok"
-    except Exception as e:
+    except ImportError as e:
+        # Only catch missing module; other exceptions propagate
         res["ta_lib"] = f"error: {e}"
     # Web sockets DNS basic check
     res["okx_ws_public_dns"] = check_port("ws.okx.com", 8443)

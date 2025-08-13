@@ -1,4 +1,43 @@
-import numpy as np, pandas as pd, talib as ta
+import numpy as np
+import pandas as pd
+
+# Attempt to import the C extension for technical indicators.  If unavailable
+# fall back to our pure‑Python implementations in utils.talib_fallback.  This
+# wrapper makes it transparent for the rest of the strategy code to call
+# indicator functions via ``ta.<func>``.
+try:
+    import talib as ta  # type: ignore
+except ImportError:
+    from ..utils.talib_fallback import (
+        EMA as _EMA,
+        ATR as _ATR,
+        RSI as _RSI,
+        BBANDS as _BBANDS,
+        OBV as _OBV,
+    )  # noqa: F401
+
+    class _Fallback:
+        @staticmethod
+        def EMA(*args, **kwargs):
+            return _EMA(*args, **kwargs)
+
+        @staticmethod
+        def ATR(*args, **kwargs):
+            return _ATR(*args, **kwargs)
+
+        @staticmethod
+        def RSI(*args, **kwargs):
+            return _RSI(*args, **kwargs)
+
+        @staticmethod
+        def BBANDS(*args, **kwargs):
+            return _BBANDS(*args, **kwargs)
+
+        @staticmethod
+        def OBV(*args, **kwargs):
+            return _OBV(*args, **kwargs)
+
+    ta = _Fallback()
 from .common import Signal
 
 class BaseStrategy:
@@ -57,12 +96,44 @@ class StrategyTrend(BaseStrategy):
     name="trend"
     def generate(self, df, micro=None):
         if len(df)<80: return None
-        prev,last = self._ind(df).iloc[-2:]
-        if not np.isfinite(last.ATR) or last.ATR<=0: return None
-        if last.EMA20>last.EMA60 and last.close>last.BBU and last.RSI>50 and 45<=prev.RSI<=55 and last.OBV>prev.OBV and last.ATR>last.ATR_MA*1.1:
-            return Signal("LONG", float(last.close), float(last.close-1.2*last.ATR), float(last.close+2.0*last.ATR), "trend long")
-        if last.EMA20<last.EMA60 and last.close<last.BBL and last.RSI<50 and 45<=prev.RSI<=55 and last.OBV<prev.OBV and last.ATR>last.ATR_MA*1.1:
-            return Signal("SHORT", float(last.close), float(last.close+1.2*last.ATR), float(last.close-2.0*last.ATR), "trend short")
+        # Fetch the last two rows explicitly.  Using ``iloc[-2:]`` returns a
+        # two‑row DataFrame which would iterate over column names when
+        # unpacked, leading to bugs.  Extract individual rows instead.
+        ind = self._ind(df)
+        prev = ind.iloc[-2]
+        last = ind.iloc[-1]
+        if not np.isfinite(last.ATR) or last.ATR <= 0:
+            return None
+        if (
+            last.EMA20 > last.EMA60
+            and last.close > last.BBU
+            and last.RSI > 50
+            and 45 <= prev.RSI <= 55
+            and last.OBV > prev.OBV
+            and last.ATR > last.ATR_MA * 1.1
+        ):
+            return Signal(
+                "LONG",
+                float(last.close),
+                float(last.close - 1.2 * last.ATR),
+                float(last.close + 2.0 * last.ATR),
+                "trend long",
+            )
+        if (
+            last.EMA20 < last.EMA60
+            and last.close < last.BBL
+            and last.RSI < 50
+            and 45 <= prev.RSI <= 55
+            and last.OBV < prev.OBV
+            and last.ATR > last.ATR_MA * 1.1
+        ):
+            return Signal(
+                "SHORT",
+                float(last.close),
+                float(last.close + 1.2 * last.ATR),
+                float(last.close - 2.0 * last.ATR),
+                "trend short",
+            )
         return None
 
 class StrategyPullbackTrend(StrategyTrend):

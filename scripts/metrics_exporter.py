@@ -52,32 +52,52 @@ def main(port:int=8008, live_dir:str="live_output"):
             risk_p=os.path.join(live_dir,"risk.log")
             if os.path.exists(risk_p):
                 for _ in open(risk_p,"r",encoding="utf-8"): c_risk_deny.inc()
-        except Exception: pass
+        except Exception:
+            pass
 
-            ex=os.path.join(live_dir, "execlog.csv")
-            if os.path.exists(ex):
-                p=c=0
-                for line in open(ex, "r", encoding="utf-8"):
-                    if ",PLACE" in line or ",POV_PLACE" in line or ",LOB_PLACE" in line: p+=1; c_place.inc()
-                    if ",CANCEL" in line: c+=1; c_cancel.inc()
-                    if ",PLACE_FAIL" in line or ",POV_PLACE_FAIL" in line or ",LOB_REPOST_FAIL" in line: c_place_fail.inc()
-                    if ",CANCEL_FAIL" in line: c_cancel_fail.inc()
-                    if ",FILL_ALL," in line: c_fill_all.inc()
-                g_cancel_ratio.set( (c/(p+1e-9)) )
-                # queue depth proxy: count POV_MAKE vs POV_CROSS
-                q=0
-                for line in open(ex, "r", encoding="utf-8"):
-                    if ",POV_MAKE," in line: q+=1
-                    elif ",POV_CROSS," in line: q-=1
-                g_queue_depth.set(q)
+        # process execution log outside of the inner try so that
+        # unexpected parsing errors don't break the main loop
+        ex = os.path.join(live_dir, "execlog.csv")
+        if os.path.exists(ex):
+            p = c = 0
+            with open(ex, "r", encoding="utf-8") as fh:
+                for line in fh:
+                    if ",PLACE" in line or ",POV_PLACE" in line or ",LOB_PLACE" in line:
+                        p += 1
+                        c_place.inc()
+                    if ",CANCEL" in line:
+                        c += 1
+                        c_cancel.inc()
+                    if ",PLACE_FAIL" in line or ",POV_PLACE_FAIL" in line or ",LOB_REPOST_FAIL" in line:
+                        c_place_fail.inc()
+                    if ",CANCEL_FAIL" in line:
+                        c_cancel_fail.inc()
+                    if ",FILL_ALL," in line:
+                        c_fill_all.inc()
+            g_cancel_ratio.set(c / (p + 1e-9))
+            # queue depth proxy: count POV_MAKE vs POV_CROSS
+            q = 0
+            with open(ex, "r", encoding="utf-8") as fh:
+                for line in fh:
+                    if ",POV_MAKE," in line:
+                        q += 1
+                    elif ",POV_CROSS," in line:
+                        q -= 1
+            g_queue_depth.set(q)
 
-            exits=os.path.join(live_dir, "exits.log")
-            if os.path.exists(exits):
-                for line in open(exits, "r", encoding="utf-8"):
-                    if ",TP," in line: c_exit_tp.inc()
-                    elif ",SL," in line: c_exit_sl.inc()
-                    else: c_exit_manual.inc()
-        
+        # process exits log
+        exits = os.path.join(live_dir, "exits.log")
+        if os.path.exists(exits):
+            with open(exits, "r", encoding="utf-8") as fh:
+                for line in fh:
+                    if ",TP," in line:
+                        c_exit_tp.inc()
+                    elif ",SL," in line:
+                        c_exit_sl.inc()
+                    else:
+                        c_exit_manual.inc()
+
+        # throttle metric collection
         time.sleep(5)
 
 if __name__=="__main__":

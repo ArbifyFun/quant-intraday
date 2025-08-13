@@ -68,16 +68,123 @@ class CandleBuffer:
 
 @dataclass
 class RunConfig:
-    inst_id: str; tf: str="5m"; live: bool=False; risk_pct: float=0.007; td_mode: str="cross"
-    strategy: str="auto"; time_windows: str="ALL"; cooldown_s: int=20
+    """
+    Configuration container for a single instrument trading bot.  This class
+    encapsulates all runtime tunables used by the live execution loop.  New
+    fields should be given sensible defaults here to avoid attribute errors
+    elsewhere in the codebase.
+
+    Parameters
+    ----------
+    inst_id : str
+        OKX instrument identifier (e.g. ``"BTC-USDT-SWAP"``).
+    tf : str, default ``"5m"``
+        Candlestick time frame passed to the market data subscription.
+    live : bool, default ``False``
+        When ``True`` orders will be sent to the exchange.  Otherwise
+        execution is simulated and logs are written for analysis.
+    risk_pct : float, default ``0.007``
+        Daily risk budget as a percentage of account equity.
+    td_mode : str, default ``"cross"``
+        Trade mode for OKX (``"cross"`` or ``"isolated"``).
+    strategy : str, default ``"auto"``
+        High‑level strategy selector.  See ``core/strategies.py``.
+    time_windows : str, default ``"ALL"``
+        Allowed trading sessions as a comma‑separated list or ``"ALL"``.
+    cooldown_s : int, default ``20``
+        Minimum seconds between entries.
+    risk_params : RiskParams
+        Structure containing trailing/stop sizing parameters.
+    scale_legs : str, default ``"50,30,20"``
+        Percentage breakdown for splitting entries into multiple legs.
+    use_private : bool, default ``False``
+        When ``True`` subscribe to private order/trade events via WS.
+    trailing_be_rr : float, default ``1.0``
+        Risk‑reward multiple to trigger breakeven trailing stop.
+    trailing_atr_mult : float, default ``1.0``
+        ATR multiple used to tighten the stop once breakeven RR is hit.
+    err_cb_threshold : int, default ``5``
+        Number of REST errors within ``err_cb_window_s`` to trip circuit breaker.
+    err_cb_window_s : int, default ``60``
+        Sliding window in seconds for circuit breaker.
+    err_cb_cool_s : int, default ``120``
+        Cooldown in seconds after circuit breaker trips.
+
+    Additional execution parameters
+    ------------------------------
+    min_atr_pct : float, default ``0.2``
+        Minimum ATR percentile (0–1) below which trading is skipped.  Updated
+        dynamically by ``autopilot_plus`` via ``thresholds.json``.
+    min_vol_pct : float, default ``0.3``
+        Minimum volume percentile (0–1) below which trading is skipped.
+    adaptive_cool : bool, default ``True``
+        Extend cooldown automatically during low‑quality regimes.
+    exec_mode : str, default ``"autoexec"``
+        Execution engine to use (``"simple"``, ``"slicer"``, ``"optimizer"``,
+        ``"pov"``, ``"lob"`` or ``"autoexec"``).  ``autoexec`` delegates
+        selection to the ``AutoExecutor``.
+    prate : float, default ``0.12``
+        Participation rate for POV/slicer executors (0–1).
+    max_slices : int, default ``8``
+        Maximum number of child orders for the slicer executor.
+    slice_timeout_s : int, default ``3``
+        Seconds to wait between successive child orders for optimizer/slicer.
+    opt_step_ticks : int, default ``1``
+        Step size in ticks for price improvement in the optimizer executor.
+    opt_max_reposts : int, default ``5``
+        Maximum number of cancel/repost attempts in the optimizer.
+    opt_cross_last : bool, default ``True``
+        Whether the optimizer should cross the spread on the final repost.
+    lob_widen_ticks : int, default ``3``
+        Spread widening threshold (in ticks) triggering a repost for the LOB executor.
+    lob_narrow_ticks : int, default ``1``
+        Spread narrowing threshold (in ticks) triggering a more aggressive repost.
+    lob_imb_th : float, default ``0.2``
+        Order‑book imbalance threshold beyond which LOB reposts.
+    lob_queue_surge : float, default ``8000``
+        Best‑queue size (contracts) above which the LOB executor will repost.
+    lob_min_dwell_s : int, default ``2``
+        Minimum seconds an order must rest on the book before it can be cancelled.
+    lob_max_cxl_per_min : int, default ``20``
+        Maximum number of cancellations per minute allowed for the LOB executor.
+    """
+    inst_id: str
+    tf: str = "5m"
+    live: bool = False
+    risk_pct: float = 0.007
+    td_mode: str = "cross"
+    strategy: str = "auto"
+    time_windows: str = "ALL"
+    cooldown_s: int = 20
     risk_params: RiskParams = field(default_factory=RiskParams)
     scale_legs: str = "50,30,20"
-    use_private: bool=False
-    trailing_be_rr: float=1.0
-    trailing_atr_mult: float=1.0
-    err_cb_threshold: int=5
-    err_cb_window_s: int=60
-    err_cb_cool_s: int=120
+    use_private: bool = False
+    trailing_be_rr: float = 1.0
+    trailing_atr_mult: float = 1.0
+    err_cb_threshold: int = 5
+    err_cb_window_s: int = 60
+    err_cb_cool_s: int = 120
+    # quality filtering and adaptive cooldown
+    min_atr_pct: float = 0.20
+    min_vol_pct: float = 0.30
+    adaptive_cool: bool = True
+    # execution engine selection and parameters
+    exec_mode: str = "autoexec"
+    prate: float = 0.12
+    max_slices: int = 8
+    slice_timeout_s: int = 3
+    opt_step_ticks: int = 1
+    opt_max_reposts: int = 5
+    opt_cross_last: bool = True
+    # limit order book executor parameters
+    lob_widen_ticks: int = 3
+    lob_narrow_ticks: int = 1
+    lob_imb_th: float = 0.2
+    lob_queue_surge: float = 8000.0
+    lob_min_dwell_s: int = 2
+    lob_max_cxl_per_min: int = 20
+    # backward‑compatibility alias for max cancels per minute; both names refer to the same value
+    lob_max_cancels_per_min: int = 20
 
 def calc_contract_size(inst, quote_ccy_risk, entry_px):
     ct_sz=float(inst.get("ctVal")); lot=float(inst.get("lotSz","1"))
@@ -310,10 +417,20 @@ class Bot:
             pass
 
     def __init__(self, cfg: RunConfig, client: OKXClient):
-        self.cfg=cfg; self.client=client
-        self.buffer=CandleBuffer(4000)
-        self._log_dir = os.getenv("QI_LOG_DIR","live_output")
-        os.makedirs(self._log_dir, exist_ok=True)
+        self.cfg = cfg
+        self.client = client
+        self.buffer = CandleBuffer(4000)
+        # Determine the base log directory.  Honour QI_LOG_DIR if it is
+        # writeable, otherwise fall back to a local 'live_output'.  This
+        # prevents OSError when the env path points at a read‑only filesystem.
+        env_log = os.getenv("QI_LOG_DIR", "live_output")
+        self._log_dir = env_log
+        try:
+            os.makedirs(self._log_dir, exist_ok=True)
+        except OSError:
+            # fallback to CWD
+            self._log_dir = "live_output"
+            os.makedirs(self._log_dir, exist_ok=True)
 
         self.router=AutoRouter() if cfg.strategy=="auto" else None
         self.strategy=None
@@ -326,17 +443,17 @@ class Bot:
         self._calendar=TradeCalendar()
         self._books=None
         self._err_times=[]
-        self._weights_path=os.path.join(os.getenv("QI_LOG_DIR","live_output"), "weights.json")
+        self._weights_path=os.path.join(self._log_dir, "weights.json")
         self._weights={}
-        self._alloc_path=os.path.join(os.getenv("QI_LOG_DIR","live_output"), "alloc.json")
+        self._alloc_path=os.path.join(self._log_dir, "alloc.json")
         self._alloc={}
-        self._cooling_path=os.path.join(os.getenv("QI_LOG_DIR","live_output"), "cooling.json")
+        self._cooling_path=os.path.join(self._log_dir, "cooling.json")
         self._cooling={}
         self._last_fire={}
         self._costs=get_costs(self.client, cfg.inst_id)
-        self._thresholds_path=os.path.join(os.getenv("QI_LOG_DIR","live_output"), "thresholds.json")
+        self._thresholds_path=os.path.join(self._log_dir, "thresholds.json")
         self._thresholds={}
-        self._risk_over_path=os.path.join(os.getenv("QI_LOG_DIR","live_output"), "risk_overrides.json")
+        self._risk_over_path=os.path.join(self._log_dir, "risk_overrides.json")
         self._risk_over={}
         self._control_path=os.path.join(self._log_dir, "control.json")
         self._control={}
@@ -345,7 +462,7 @@ class Bot:
         self._fb=FundingBasisFeed()
         self._volt=VolTarget(target_daily=0.02)
         self._pguard=PerformanceGuard(self._log_dir)
-        self._log_dir=os.getenv("QI_LOG_DIR","live_output"); os.makedirs(self._log_dir, exist_ok=True)
+        # _log_dir has been initialised above and directories created; do not reassign here
         self._trades_path=os.path.join(self._log_dir, f"trades_{cfg.inst_id.replace('/','-')}.csv")
         if not os.path.exists(self._trades_path):
             with open(self._trades_path,"w",encoding="utf-8") as f: f.write("ts,inst,side,price,sl,tp,size,reason\n")
@@ -449,9 +566,20 @@ class Bot:
                 # quality filters: ATR/Volume percentiles on last 500 bars
                 try:
                     tail = df.tail(500)
-                    import talib as ta, numpy as np
-                    c,h,l = tail["close"].to_numpy(), tail["high"].to_numpy(), tail["low"].to_numpy()
-                    atr = ta.ATR(h,l,c,14)
+                    # Compute ATR and volume percentiles.  Prefer TA‑Lib but fall back to
+                    # our pure‑Python implementation if unavailable.  NumPy is already
+                    # imported as ``np`` at the module top.
+                    try:
+                        import talib as ta  # type: ignore
+                    except ImportError:
+                        from ..utils.talib_fallback import ATR as _ATR  # noqa: F401
+                        class _ta:
+                            @staticmethod
+                            def ATR(*args, **kwargs):
+                                return _ATR(*args, **kwargs)
+                        ta = _ta()  # type: ignore
+                    c, h, l = tail["close"].to_numpy(), tail["high"].to_numpy(), tail["low"].to_numpy()
+                    atr = ta.ATR(h, l, c, 14)
                     vol = tail["volume"].to_numpy()
                     atr_pct = (atr[-1] - np.nanmin(atr)) / (np.nanmax(atr) - np.nanmin(atr) + 1e-12)
                     vol_pct = (vol[-1] - np.nanmin(vol)) / (np.nanmax(vol) - np.nanmin(vol) + 1e-12)
@@ -538,11 +666,20 @@ class Bot:
         # vol targeting multiplier based on last 100 bars ATR%
         df=self.buffer.to_df().tail(100)
         try:
-            c=df['close'].to_numpy(); h=df['high'].to_numpy(); l=df['low'].to_numpy()
-            import talib as _ta, numpy as _np
-            atr=_ta.ATR(h,l,c,14)[-1]; atrp=atr/max(1e-9,c[-1])
+            c = df['close'].to_numpy(); h = df['high'].to_numpy(); l = df['low'].to_numpy()
+            # Use TA‑Lib if available; otherwise fall back to the pure‑Python ATR
+            try:
+                import talib as _ta  # type: ignore
+            except ImportError:
+                from ..utils.talib_fallback import ATR as _ATR  # noqa: F401
+                class _ta:
+                    @staticmethod
+                    def ATR(*args, **kwargs):
+                        return _ATR(*args, **kwargs)
+            atr = _ta.ATR(h, l, c, 14)[-1]
+            atrp = atr / max(1e-9, c[-1])
         except Exception:
-            atrp=0.01
+            atrp = 0.01
         vt_mult=self._volt.multiplier(atrp)
         self._load_risk_overrides()
         over=float(self._risk_over.get(self.cfg.inst_id, 1.0)) if isinstance(self._risk_over, dict) else 1.0
@@ -594,8 +731,16 @@ class Bot:
                                     max_reposts=self.cfg.opt_max_reposts, cross_when_last=self.cfg.opt_cross_last)
                 order_ids = await opt.execute(self, side, pos_side, int(sz_total), float(px))
             elif self.cfg.exec_mode == "lob":
-                lob = LOBExecutor(self.cfg.lob_widen_ticks, self.cfg.lob_narrow_ticks, self.cfg.lob_imb_th,
-                                  self.cfg.lob_queue_surge, self.cfg.lob_min_dwell_s, self.cfg.lob_max_cxl_per_min)
+                # Use lob_max_cancels_per_min for backward compatibility with AutoExecutor.  A separate alias
+                # ``lob_max_cxl_per_min`` exists on RunConfig for historical callers.
+                lob = LOBExecutor(
+                    self.cfg.lob_widen_ticks,
+                    self.cfg.lob_narrow_ticks,
+                    self.cfg.lob_imb_th,
+                    self.cfg.lob_queue_surge,
+                    self.cfg.lob_min_dwell_s,
+                    self.cfg.lob_max_cancels_per_min,
+                )
                 order_ids = await lob.execute(self, side, pos_side, int(sz_total), float(px))
             elif self.cfg.exec_mode == "pov":
                 pov = POVExecutor(pov_rate=min(0.5, max(0.02, self.cfg.prate)), min_child=1, adverse_ticks=2, queue_max=5e3, cycle_s=max(1,int(self.cfg.slice_timeout_s)))
@@ -621,8 +766,19 @@ class Bot:
             print("[LIVE] order error:", e); self._err_times.append(time.time())
 
     async def _trailing_amend_loop(self, ord_ids, sig):
+        # We need ATR for trailing stop calculation; try TA‑Lib first,
+        # otherwise use our pure‑Python fallback.  If neither is available
+        # return early without trailing amendments.
         try:
-            import talib as ta
+            try:
+                import talib as ta  # type: ignore
+            except ImportError:
+                from ..utils.talib_fallback import ATR as _ATR  # noqa: F401
+                class _ta:
+                    @staticmethod
+                    def ATR(*args, **kwargs):
+                        return _ATR(*args, **kwargs)
+                ta = _ta()  # type: ignore
         except Exception:
             return
         step=10; last_sl=sig.sl

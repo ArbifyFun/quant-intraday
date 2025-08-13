@@ -61,7 +61,11 @@ def run(cfg: str = "qi.yaml"):
     """Run from master config (qi.yaml)."""
     q = load_qi_config(cfg)
     # prefer portfolio orchestrator
-    cli = OKXClient(os.getenv("OKX_API_KEY"), os.getenv("OKX_API_SECRET"), os.getenv("OKX_API_PASSPHRASE"), os.getenv("OKX_ACCOUNT","trade"), simulated=q.exchange.simulated)
+    # OKXClient does not accept a ``simulated`` keyword argument.  Simulation
+    # mode is controlled via the ``OKX_SIMULATED`` environment variable
+    # instead (see ``exchange/okx_client.py``).  Pass only the required
+    # parameters here.
+    cli = OKXClient(os.getenv("OKX_API_KEY"), os.getenv("OKX_API_SECRET"), os.getenv("OKX_API_PASSPHRASE"), os.getenv("OKX_ACCOUNT","trade"))
     # write portfolio.yaml from qi.yaml for compatibility
     import yaml, json
     pf = {"instruments": [ {"inst": it.inst, "tf": it.tf, "risk_share": it.risk_share, "exec_mode": q.execution.mode} for it in q.portfolio.instruments ],
@@ -201,9 +205,10 @@ def push():
 
 @app.command()
 def kpi():
-    """Start execution KPI daemon (reads execlog.csv)."""
-    import quant_intraday.scripts.exec_kpi_daemon as kd  # type: ignore
-    kd.main()
+    """Start the execution KPI daemon (reads execlog.csv and exposes KPIs as JSON)."""
+    # Delegate to the KPI daemon script; unify previous definitions.
+    from quant_intraday.scripts import exec_kpi_daemon  # type: ignore
+    exec_kpi_daemon.main()
 
 
 @app.command()
@@ -220,10 +225,10 @@ def check():
         print("doctor error:", e)
 
 
-@app.command()
-def doctor():
-    """Print loaded module paths and Bot attributes."""
-    import importlib, inspect, quant_intraday
+@app.command(name="module-info")
+def module_info():
+    """Print loaded module paths and selected Bot class attributes for debugging."""
+    import importlib, quant_intraday
     from rich import print as rprint
     rprint({"pkg_file": quant_intraday.__file__})
     try:
@@ -235,7 +240,7 @@ def doctor():
         if has["_wss_urls"]:
             rprint({"_wss_urls_preview": str(lb.Bot._wss_urls)})
     except Exception as e:
-        rprint({"doctor_error": str(e)})
+        rprint({"module_info_error": str(e)})
 
 
 @app.command()

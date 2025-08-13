@@ -12,18 +12,30 @@ This patch consolidates your v26_20a code and fixes:
 - Completed Web UI static/templates mounting
 - Packaging exclusions, `.gitignore`, Docker notes
 
-## Quickstart (macOS/Linux, zsh/bash)
+### Prerequisites
+
+This toolkit is designed to use the official [TA‑Lib](https://mrjbq7.github.io/ta-lib/) C extension for technical analysis.  All indicator calculations assume that `TA‑Lib` is available in your Python environment.  For completeness and to enable limited backtesting in constrained environments (e.g. CI pipelines), a minimal pure‑Python fallback implementation lives in `quant_intraday/utils/talib_fallback.py`; however, **this fallback is intended only for development or testing** and may produce slightly different results.  In a production deployment you **should install the official `TA‑Lib` library** (see [installation instructions](https://mrjbq7.github.io/ta-lib/install.html)).  When `TA‑Lib` is present, the fallback is never used.
+
+## Quickstart (macOS/Linux)
+
+推荐使用统一的启动脚本 `scripts/bootstrap.sh` 进行一键安装和自检：
 
 ```bash
 git clone <your-repo>
-cd quant_intraday_toolkit_v26_20a_patched
-./bootstrap.sh
-source .venv/bin/activate
-# Fill your .env (OKX_API_KEY/SECRET/PASSPHRASE, OKX_SIMULATED=1 for demo)
-qi check
-qi http-test           # sanity call: /account/balance
-qi web --host 0.0.0.0 --port 8080
+cd quant_intraday_toolkit_v26_20a
+chmod +x scripts/bootstrap.sh
+./scripts/bootstrap.sh    # 自动选择 docker 或本地模式
 ```
+
+脚本将在首次执行时创建 `.env`（如果不存在）、安装依赖并运行 `qi preflight` 与 `qi doctor`。若您希望显式指定模式，可传递 `local` 或 `docker` 参数。安装完成后，您可以手动激活虚拟环境并启动 Web UI 或组合交易：
+
+```bash
+source .venv/bin/activate     # 如在本地安装模式
+qi web --host 0.0.0.0 --port 8080
+qi run --cfg qi.yaml          # 启动组合实盘/模拟
+```
+
+更多 CLI 命令与参数说明详见 [docs/CLI.md](docs/CLI.md)。脚本工具的介绍在 [docs/SCRIPTS.md](docs/SCRIPTS.md)。
 
 ## Environment (.env)
 
@@ -48,12 +60,16 @@ TZ=Asia/Tokyo
 ## CLI
 
 ```
-qi check         # env & connectivity; writes live_output/preflight.json
-qi doctor        # code sanity (wss urls/proxy hooks)
-qi http-test     # REST sanity; prints status & body
-qi run           # run portfolio from qi.yaml
+qi check          # run preflight then doctor; writes preflight.json and prints a summary
+qi doctor         # validate qi.yaml and run preflight; exits non‑zero on failure
+qi module-info    # print loaded module paths and Bot attribute flags (debugging aid)
+qi kpi            # export execution KPIs from execlog.csv to JSON (runs daemon)
+qi http-test      # REST sanity; prints status & body of /account/balance
+qi run            # run portfolio from qi.yaml
 qi backtest --csv your.csv --strategy auto --inst BTC-USDT-SWAP
-qi web           # serve FastAPI Web UI
+qi web            # serve FastAPI Web UI
+
+有关项目中大量辅助脚本的分类与用途说明，请参考 [docs/SCRIPTS.md](docs/SCRIPTS.md)。该文档按“运行与部署”“调参与自适应”“报告与监控”等类别对 `scripts/` 目录下的工具进行了详细梳理。借助这些脚本，可以定制自动调参、归因报告生成、执行回放、对账、Prometheus 指标导出等功能。
 ```
 
 ## Docker
