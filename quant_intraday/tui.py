@@ -10,9 +10,7 @@ Press 'p' to panic flatten (close all positions), press 'q' to quit the TUI, and
 """
 import time
 import sys
-import select
-from typing import Optional
-
+import s
 from rich.console import Console
 from rich.table import Table
 from rich.live import Live
@@ -39,22 +37,13 @@ def run_tui(live_dir: str = "live_output", interval: float = 2.0) -> None:
     prev_drawdown: Optional[float] = None
     prev_trades: Optional[int] = None
 
-    baseline_equity: Optional[float] = None
-prev_pnl: Optional[float] = None
+    
     # Determine refresh rate for Live (at least 1)
     refresh_rate = max(1, int(1 / interval)) if interval > 0 else 1
 
     with Live(table, console=console, refresh_per_second=refresh_rate):
- 
-  
-            # Initialize baseline equity
-            if baseline_equity is None and equity is not None:
-                baseline_equity = equity
-            # Compute PnL based on baseline equity
-            if baseline_equity is not None and equity is not None:
-                pnl = equity - baseline_equity
-            else:
-                pnl = None
+
+        
 
         while True:
             metrics = get_metrics(live_dir)
