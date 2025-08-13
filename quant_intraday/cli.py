@@ -304,3 +304,16 @@ def monitor(
     from .monitor import monitor_live_output
     monitor_live_output(live_dir, interval, once)
 
+
+
+# Add TUI command for terminal GUI
+@app.command()
+def tui(
+    live_dir: str = typer.Option("live_output", help="Live output directory"),
+    interval: float = typer.Option(2.0, help="Refresh interval in seconds"),
+):
+    """
+    Run a terminal TUI to display live equity, drawdown and trade count from the live output directory.
+    """
+    from .tui import run_tui
+    run_tui(live_dir, interval)
