@@ -1,5 +1,5 @@
 import os
-import os, json, hmac, time, base64, asyncio, hashlib, httpx, websockets
+import os, json, hmac, time, base64, asyncio, hashlib, websockets
 import numpy as np, pandas as pd
 from dataclasses import dataclass, field
 from typing import Optional, Deque, Dict
@@ -17,11 +17,9 @@ from ..utils.vol_target import VolTarget
 from ..utils.perf_guard import PerformanceGuard
 from ..exchange.private_ws import OKXPrivateWS
 from ..exchange.okx_client import OKXClient
-from .slicer import SlicerExec
-from .optimizer import ExecOptimizer
-from .pov_executor import POVExecutor
-from .lob_executor import LOBExecutor
-from .autoexec import AutoExecutor
+from .notifier import Notifier
+from .risk_guard import RiskGuard
+from .executor_manager import ExecutorManager
 
 OKX_WSS_PUBLIC = "wss://ws.okx.com:8443/ws/v5/public"
 
@@ -34,20 +32,6 @@ def okx_sign(ts: str, method: str, path: str, body: str, secret: str) -> str:
     msg = f"{ts}{method}{path}{body}".encode()
     mac = hmac.new(secret.encode(), msg, hashlib.sha256).digest()
     return base64.b64encode(mac).decode()
-
-def send_tg(text: str):
-    tok=os.getenv("TELEGRAM_BOT_TOKEN"); chat=os.getenv("TELEGRAM_CHAT_ID")
-    if not tok or not chat: return
-    try:
-        httpx.post(f"https://api.telegram.org/bot{tok}/sendMessage", data={"chat_id":chat,"text":text}, timeout=5.0)
-    except Exception: pass
-
-def send_feishu(text: str):
-    url=os.getenv("FEISHU_WEBHOOK_URL")
-    if not url: return
-    try:
-        httpx.post(url, json={"msg_type":"text","content":{"text":text}}, timeout=5.0)
-    except Exception: pass
 
 @dataclass
 class Candle:
@@ -214,89 +198,6 @@ class Bot:
         except Exception:
             return 0.0
 
-    def _account_guard_denies(self, risk_amt):
-        """Check control.json risk constraints. Return True to block entry."""
-        self._load_control()
-        c = self._control if isinstance(self._control, dict) else {}
-        # Daily loss limit USD
-        day_loss_usd = float(c.get("day_loss_limit_usd", 0) or 0)
-        if day_loss_usd > 0:
-            pnl = self._today_pnl()
-            if pnl <= -abs(day_loss_usd):
-                return True
-        # Daily loss limit %
-        day_loss_pct = float(c.get("day_loss_limit_pct", 0) or 0)
-        if day_loss_pct > 0:
-            # estimate baseline equity as balance now / (1 + pnl%) ; conservative: block if risk exceeds margin under dd
-            try:
-                eq_now = self.client.get_balance("USDT")
-                pnl = self._today_pnl()
-                # if baseline unknown, treat as exceeded when eq drop exceeds pct
-                if eq_now > 0 and pnl < 0 and (-pnl/eq_now) >= day_loss_pct:
-                    return True
-            except Exception:
-                pass
-        # Global pause flag already handled by _load_control in main loop
-        # Max concurrent orders/positions can be approximated via cooling/last_fire but omitted for simplicity here
-        return False
-
-    def _is_disabled(self, sig):
-        # control.json may contain {"disable_strategies": ["funding","basis", ...]}
-        try:
-            if not isinstance(sig, Signal):
-                return False
-        except Exception:
-            return False
-        try:
-            self._load_control()
-            ds = self._control.get("disable_strategies", [])
-            if not ds: return False
-            # infer strategy key from reason (before '|' if exists)
-            key = None
-            if isinstance(sig.reason, str):
-                key = sig.reason.split('|')[0].strip().lower()
-            return key in {x.lower() for x in ds if isinstance(x,str)}
-        except Exception:
-            return False
-
-    def _load_control(self):
-        import json, os, time
-        try:
-            st=os.stat(self._control_path)
-            if not hasattr(self, "_control_mtime") or st.st_mtime != self._control_mtime:
-                with open(self._control_path, "r", encoding="utf-8") as f:
-                    self._control=json.load(f) or {}
-                self._control_mtime=st.st_mtime
-        except FileNotFoundError:
-            self._control={}
-        except Exception:
-            pass
-        # evaluate pause
-        paused = False
-        try:
-            if isinstance(self._control, dict):
-                if self._control.get("paused") is True:
-                    paused = True
-                pu = float(self._control.get("pause_until", 0) or 0)
-                if pu and time.time() < pu:
-                    paused = True
-        except Exception:
-            pass
-        return paused
-
-    def _load_risk_overrides(self):
-        import json, os
-        try:
-            st=os.stat(self._risk_over_path)
-            if not hasattr(self, "_risk_over_mtime") or st.st_mtime != self._risk_over_mtime:
-                with open(self._risk_over_path, "r", encoding="utf-8") as f:
-                    self._risk_over=json.load(f) or {}
-                self._risk_over_mtime=st.st_mtime
-        except FileNotFoundError:
-            self._risk_over={}
-        except Exception:
-            pass
-
     def _refresh_funding_basis(self):
         try:
             # funding rate (next) for perp
@@ -462,6 +363,9 @@ class Bot:
         self._fb=FundingBasisFeed()
         self._volt=VolTarget(target_daily=0.02)
         self._pguard=PerformanceGuard(self._log_dir)
+        self.notifier = Notifier()
+        self.risk_guard = RiskGuard(self._control_path, self._risk_over_path, self.client, self._today_pnl)
+        self.executor_manager = ExecutorManager(self.cfg)
         # _log_dir has been initialised above and directories created; do not reassign here
         self._trades_path=os.path.join(self._log_dir, f"trades_{cfg.inst_id.replace('/','-')}.csv")
         if not os.path.exists(self._trades_path):
@@ -614,18 +518,19 @@ class Bot:
                 # web control (pause)
                 # exec_mode override & prate override
                 try:
-                    self._load_control()
-                    at = self._control.get('autotune', {}) if isinstance(self._control, dict) else {}
+                    self.risk_guard.load_control()
+                    at = self.risk_guard.control.get('autotune', {}) if isinstance(self.risk_guard.control, dict) else {}
                     if isinstance(at, dict):
                         mo = at.get('exec_mode_by_inst', {}).get(self.cfg.inst_id)
-                        if isinstance(mo, str): self.cfg.exec_mode = mo
+                        if isinstance(mo, str):
+                            self.cfg.exec_mode = mo
                         pr = at.get('prate_by_inst', {}).get(self.cfg.inst_id)
                         if pr is not None:
                             self.cfg.prate = float(pr)
                 except Exception:
                     pass
-                
-                if self._load_control():
+
+                if self.risk_guard.load_control():
                     await asyncio.sleep(2); continue
                 # funding/basis refresh
                 self._refresh_funding_basis()
@@ -681,20 +586,20 @@ class Bot:
         except Exception:
             atrp = 0.01
         vt_mult=self._volt.multiplier(atrp)
-        self._load_risk_overrides()
-        over=float(self._risk_over.get(self.cfg.inst_id, 1.0)) if isinstance(self._risk_over, dict) else 1.0
+        self.risk_guard.load_risk_overrides()
+        over=float(self.risk_guard.risk_over.get(self.cfg.inst_id, 1.0)) if isinstance(self.risk_guard.risk_over, dict) else 1.0
         risk_amt=equity*self.cfg.risk_pct*mult*vt_mult*over
         # per-inst risk cap (USD) from control.json
-        self._load_control()
+        self.risk_guard.load_control()
         try:
-            cap_map=self._control.get('per_inst_risk_cap_usd', {}) if isinstance(self._control, dict) else {}
+            cap_map=self.risk_guard.control.get('per_inst_risk_cap_usd', {}) if isinstance(self.risk_guard.control, dict) else {}
             cap=float(cap_map.get(self.cfg.inst_id, 0) or 0)
             if cap>0:
                 risk_amt=min(risk_amt, cap)
         except Exception:
             pass
         # account guard
-        if self._account_guard_denies(risk_amt):
+        if self.risk_guard.account_guard_denies(risk_amt):
             print('[RISK] account guard deny entry'); return
         inst=self.client.get_instrument(self.cfg.inst_id)
         worst_per_unit=abs(sig.price-sig.sl)*float(inst.get("ctVal"))
@@ -716,47 +621,18 @@ class Bot:
         if not self.cfg.live:
             print(f"[DRY] split {sz_total} legs {self.scale_legs}% px={px} tp={tp_trigger} sl={sl_trigger}")
             with open(self._trades_path,"a",encoding="utf-8") as f: f.write(f"{int(time.time()*1000)},{self.cfg.inst_id},{sig.side},{px},{sl_trigger},{tp_trigger},{sz_total},{sig.reason}\n")
-            send_tg(f"ENTRY {self.cfg.inst_id} {sig.side} px={px} sl={sl_trigger} tp={tp_trigger} sz={sz_total}")
+            self.notifier.send_tg(f"ENTRY {self.cfg.inst_id} {sig.side} px={px} sl={sl_trigger} tp={tp_trigger} sz={sz_total}")
             if self._budget: self._budget.consume(risk_amt)
             self._pguard.consume(self.cfg.inst_id, risk_amt)
             return
         # live placement
         try:
-            order_ids=[]
-            if self.cfg.exec_mode == "slicer":
-                slicer = SlicerExec(self.cfg.prate, self.cfg.max_slices, self.cfg.slice_timeout_s)
-                order_ids = await slicer.execute(self, side, pos_side, int(sz_total), float(px))
-            elif self.cfg.exec_mode == "optimizer":
-                opt = ExecOptimizer(step_ticks=self.cfg.opt_step_ticks, slice_timeout_s=self.cfg.slice_timeout_s,
-                                    max_reposts=self.cfg.opt_max_reposts, cross_when_last=self.cfg.opt_cross_last)
-                order_ids = await opt.execute(self, side, pos_side, int(sz_total), float(px))
-            elif self.cfg.exec_mode == "lob":
-                # Use lob_max_cancels_per_min for backward compatibility with AutoExecutor.  A separate alias
-                # ``lob_max_cxl_per_min`` exists on RunConfig for historical callers.
-                lob = LOBExecutor(
-                    self.cfg.lob_widen_ticks,
-                    self.cfg.lob_narrow_ticks,
-                    self.cfg.lob_imb_th,
-                    self.cfg.lob_queue_surge,
-                    self.cfg.lob_min_dwell_s,
-                    self.cfg.lob_max_cancels_per_min,
-                )
-                order_ids = await lob.execute(self, side, pos_side, int(sz_total), float(px))
-            elif self.cfg.exec_mode == "pov":
-                pov = POVExecutor(pov_rate=min(0.5, max(0.02, self.cfg.prate)), min_child=1, adverse_ticks=2, queue_max=5e3, cycle_s=max(1,int(self.cfg.slice_timeout_s)))
-                order_ids = await pov.execute(self, side, pos_side, int(sz_total), float(px))
-            else:
-                legs=[p for p in self.scale_legs if p>0]
-                for i,pct in enumerate(legs):
-                    leg_sz = max(1, int(float(sz_total)*(pct/100.0)))
-                    clid=f"bot_{int(time.time())}_{i}"
-                    resp=self.client.place_order(instId=self.cfg.inst_id, tdMode=self.cfg.td_mode, side=side, posSide=pos_side, ordType="limit", sz=str(leg_sz), px=px, reduceOnly=False, clOrdId=clid)
-                    order_ids.append(resp.get("ordId", resp))
+            order_ids = await self.executor_manager.execute(self, side, pos_side, int(sz_total), float(px))
             # algo TP/SL
             self.client.order_algo(instId=self.cfg.inst_id, tdMode=self.cfg.td_mode, posSide=pos_side, ordType="take-profit", triggerPx=tp_trigger, orderPx=tp_trigger)
             self.client.order_algo(instId=self.cfg.inst_id, tdMode=self.cfg.td_mode, posSide=pos_side, ordType="stop-loss",  triggerPx=sl_trigger, orderPx=sl_trigger)
             with open(self._trades_path,"a",encoding="utf-8") as f: f.write(f"{int(time.time()*1000)},{self.cfg.inst_id},{sig.side},{px},{sl_trigger},{tp_trigger},{sz_total},{sig.reason}\n")
-            send_tg(f"ENTRY {self.cfg.inst_id} {sig.side} px={px} sl={sl_trigger} tp={tp_trigger} sz={sz_total}")
+            self.notifier.send_tg(f"ENTRY {self.cfg.inst_id} {sig.side} px={px} sl={sl_trigger} tp={tp_trigger} sz={sz_total}")
             # trailing if enabled
             if self.cfg.trailing_be_rr or self.cfg.trailing_atr_mult:
                 asyncio.create_task(self._trailing_amend_loop(order_ids, sig))
@@ -809,7 +685,7 @@ class Bot:
                         self.client.cancel_algo(instId=self.cfg.inst_id, ordType="stop-loss")
                         self.client.order_algo(instId=self.cfg.inst_id, tdMode=self.cfg.td_mode, posSide=("long" if sig.side=="LONG" else "short"), ordType="stop-loss", triggerPx=sl_trigger, orderPx=sl_trigger)
                 with open(os.path.join(self._log_dir,"trail.log"),"a",encoding="utf-8") as f: f.write(f"{int(time.time()*1000)},AMEND_OK,{sl_trigger}\n")
-                send_tg(f"TRAIL {self.cfg.inst_id} SL->{sl_trigger}")
+                self.notifier.send_tg(f"TRAIL {self.cfg.inst_id} SL->{sl_trigger}")
             except Exception as e:
                 with open(os.path.join(self._log_dir,"trail.log"),"a",encoding="utf-8") as f: f.write(f"{int(time.time()*1000)},AMEND_FAIL,{sl_trigger}\n")
                 print("[TRAIL] amend error:", e)
