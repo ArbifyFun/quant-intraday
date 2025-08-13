@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import os, asyncio, argparse
-from quant_intraday.engine.exchange.okx_client import OKXClient
+from quant_intraday.exchange.okx_client import OKXClient
 from quant_intraday.engine.portfolio import PortfolioOrchestrator
 
 def main():

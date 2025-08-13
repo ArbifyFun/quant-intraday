@@ -8,7 +8,7 @@ import os, sys, asyncio, typer
 from rich import print as rprint
 from .config import load_qi_config
 from .utils import logger as qi_logger
-from .engine.exchange.okx_client import OKXClient  # dual path ensured in v18
+from .exchange.okx_client import OKXClient
 from .engine.live_bot import RunConfig, Bot
 from .engine.portfolio import PortfolioOrchestrator
 
@@ -265,7 +265,7 @@ def env():
 def http_test(sim: bool = True):
     """One-shot GET /account/balance with debug prints (masking secrets)."""
     import os, json
-    from quant_intraday.engine.exchange.okx_client import OKXClient
+    from quant_intraday.exchange.okx_client import OKXClient
     from dotenv import find_dotenv, load_dotenv
     load_dotenv(find_dotenv(usecwd=True), override=False)
     key = os.getenv("OKX_API_KEY"); sec = os.getenv("OKX_API_SECRET"); pp = os.getenv("OKX_API_PASSPHRASE")
