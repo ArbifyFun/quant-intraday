@@ -6,8 +6,8 @@ to periodically query live metrics (equity, drawdown, trades) and display them
 in a dynamic table. It also calculates changes relative to the previous refresh
 and uses colored arrows to indicate the direction of change.
 
-Press 'p' to panic flatten (close all positions) and 'q' to quit th""" UI."""
-
+Press 'p' to panic flatten (close all posit 'q' t ando quit the TUI.
+"""
 import time
 import sys
 import select
@@ -130,8 +130,9 @@ def run_tui(live_dir: str = "live_output", interval: float = 2.0) -> None:
                 console.print(f"[red]Error during panic flatten: {e}[/]")
         elif cmd == "q":
             break
-
-      k
+        elif cmd == "h" or cmd == "?":
+            console.print("\nCommands: p = panic flatten, q = quit, h/? = help")
+      
    
             # Sleep until next refresh
             time.sleep(interval)
