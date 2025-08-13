@@ -35,19 +35,23 @@ def okx_sign(ts: str, method: str, path: str, body: str, secret: str) -> str:
     mac = hmac.new(secret.encode(), msg, hashlib.sha256).digest()
     return base64.b64encode(mac).decode()
 
-def send_tg(text: str):
+async def send_tg(text: str):
     tok=os.getenv("TELEGRAM_BOT_TOKEN"); chat=os.getenv("TELEGRAM_CHAT_ID")
     if not tok or not chat: return
     try:
-        httpx.post(f"https://api.telegram.org/bot{tok}/sendMessage", data={"chat_id":chat,"text":text}, timeout=5.0)
-    except Exception: pass
+        async with httpx.AsyncClient() as cli:
+            await cli.post(f"https://api.telegram.org/bot{tok}/sendMessage", data={"chat_id":chat,"text":text}, timeout=5.0)
+    except Exception:
+        pass
 
-def send_feishu(text: str):
+async def send_feishu(text: str):
     url=os.getenv("FEISHU_WEBHOOK_URL")
     if not url: return
     try:
-        httpx.post(url, json={"msg_type":"text","content":{"text":text}}, timeout=5.0)
-    except Exception: pass
+        async with httpx.AsyncClient() as cli:
+            await cli.post(url, json={"msg_type":"text","content":{"text":text}}, timeout=5.0)
+    except Exception:
+        pass
 
 @dataclass
 class Candle:
@@ -214,7 +218,7 @@ class Bot:
         except Exception:
             return 0.0
 
-    def _account_guard_denies(self, risk_amt):
+    async def _account_guard_denies(self, risk_amt):
         """Check control.json risk constraints. Return True to block entry."""
         self._load_control()
         c = self._control if isinstance(self._control, dict) else {}
@@ -229,7 +233,7 @@ class Bot:
         if day_loss_pct > 0:
             # estimate baseline equity as balance now / (1 + pnl%) ; conservative: block if risk exceeds margin under dd
             try:
-                eq_now = self.client.get_balance("USDT")
+                eq_now = await self.client.get_balance_async("USDT")
                 pnl = self._today_pnl()
                 # if baseline unknown, treat as exceeded when eq drop exceeds pct
                 if eq_now > 0 and pnl < 0 and (-pnl/eq_now) >= day_loss_pct:
@@ -487,7 +491,7 @@ class Bot:
 
     async def _bootstrap_history(self):
         path=f"/api/v5/market/candles?instId={self.cfg.inst_id}&bar={self.cfg.tf}&limit=200"
-        r=self.client.rest.get(path); r.raise_for_status()
+        r=await asyncio.to_thread(self.client.rest.get, path); r.raise_for_status()
         for k in reversed(r.json()["data"]):
             ts=int(k[0]); o,h,l,c = map(float,k[1:5]); v=float(k[7] if len(k)>7 else (k[5] if len(k)>5 else 0.0))
             self.buffer.upsert(ts,o,h,l,c,v)
@@ -549,7 +553,7 @@ class Bot:
                 await asyncio.sleep(1)
                 # equity snapshot + pguard
                 try:
-                    eq=self.client.get_balance("USDT")
+                    eq=await self.client.get_balance_async("USDT")
                     with open(self._eq_path,"a",encoding="utf-8") as f: f.write(f"{int(time.time()*1000)},{eq}\n")
                     self._pguard.open_day(eq); self._pguard.mark_pnl(eq)
                 except Exception: pass
@@ -557,7 +561,7 @@ class Bot:
                 import datetime
                 now_dt = datetime.datetime.utcnow().date()
                 if (self._day_key is None) or (now_dt != self._day_key):
-                    eq0=self.client.get_balance("USDT"); self._budget=RiskBudget(eq0, self.risk_params); self._day_key=now_dt
+                    eq0=await self.client.get_balance_async("USDT"); self._budget=RiskBudget(eq0, self.risk_params); self._day_key=now_dt
                 # cooldown
                 if time.time() < cool_until: continue
                 df=self.buffer.to_df()
@@ -628,7 +632,7 @@ class Bot:
                 if self._load_control():
                     await asyncio.sleep(2); continue
                 # funding/basis refresh
-                self._refresh_funding_basis()
+                await asyncio.to_thread(self._refresh_funding_basis)
                 # build micro (simple imbalance if book available)
                 micro=None
                 if self._books:
@@ -660,7 +664,7 @@ class Bot:
         now=time.time(); self._err_times=[t for t in self._err_times if now - t < self.cfg.err_cb_window_s]
         if len(self._err_times)>=self.cfg.err_cb_threshold:
             print("[CB] REST errors threshold reached, cooling"); await asyncio.sleep(self.cfg.err_cb_cool_s); return
-        equity=self.client.get_balance("USDT")
+        equity=await self.client.get_balance_async("USDT")
         # per-inst allocation multiplier (alloc.json: {"BTC-USDT-SWAP": 1.2, ...})
         mult = float(self._alloc.get(self.cfg.inst_id, 1.0)) if isinstance(self._alloc, dict) else 1.0
         # vol targeting multiplier based on last 100 bars ATR%
@@ -694,9 +698,9 @@ class Bot:
         except Exception:
             pass
         # account guard
-        if self._account_guard_denies(risk_amt):
+        if await self._account_guard_denies(risk_amt):
             print('[RISK] account guard deny entry'); return
-        inst=self.client.get_instrument(self.cfg.inst_id)
+        inst=await self.client.get_instrument_async(self.cfg.inst_id)
         worst_per_unit=abs(sig.price-sig.sl)*float(inst.get("ctVal"))
         if self._budget and not self._budget.can_open(risk_amt):
             print("[Risk] Daily budget exhausted"); 
@@ -716,7 +720,7 @@ class Bot:
         if not self.cfg.live:
             print(f"[DRY] split {sz_total} legs {self.scale_legs}% px={px} tp={tp_trigger} sl={sl_trigger}")
             with open(self._trades_path,"a",encoding="utf-8") as f: f.write(f"{int(time.time()*1000)},{self.cfg.inst_id},{sig.side},{px},{sl_trigger},{tp_trigger},{sz_total},{sig.reason}\n")
-            send_tg(f"ENTRY {self.cfg.inst_id} {sig.side} px={px} sl={sl_trigger} tp={tp_trigger} sz={sz_total}")
+            await send_tg(f"ENTRY {self.cfg.inst_id} {sig.side} px={px} sl={sl_trigger} tp={tp_trigger} sz={sz_total}")
             if self._budget: self._budget.consume(risk_amt)
             self._pguard.consume(self.cfg.inst_id, risk_amt)
             return
@@ -750,13 +754,13 @@ class Bot:
                 for i,pct in enumerate(legs):
                     leg_sz = max(1, int(float(sz_total)*(pct/100.0)))
                     clid=f"bot_{int(time.time())}_{i}"
-                    resp=self.client.place_order(instId=self.cfg.inst_id, tdMode=self.cfg.td_mode, side=side, posSide=pos_side, ordType="limit", sz=str(leg_sz), px=px, reduceOnly=False, clOrdId=clid)
+                    resp=await self.client.place_order_async(instId=self.cfg.inst_id, tdMode=self.cfg.td_mode, side=side, posSide=pos_side, ordType="limit", sz=str(leg_sz), px=px, reduceOnly=False, clOrdId=clid)
                     order_ids.append(resp.get("ordId", resp))
             # algo TP/SL
-            self.client.order_algo(instId=self.cfg.inst_id, tdMode=self.cfg.td_mode, posSide=pos_side, ordType="take-profit", triggerPx=tp_trigger, orderPx=tp_trigger)
-            self.client.order_algo(instId=self.cfg.inst_id, tdMode=self.cfg.td_mode, posSide=pos_side, ordType="stop-loss",  triggerPx=sl_trigger, orderPx=sl_trigger)
+            await self.client.order_algo_async(instId=self.cfg.inst_id, tdMode=self.cfg.td_mode, posSide=pos_side, ordType="take-profit", triggerPx=tp_trigger, orderPx=tp_trigger)
+            await self.client.order_algo_async(instId=self.cfg.inst_id, tdMode=self.cfg.td_mode, posSide=pos_side, ordType="stop-loss",  triggerPx=sl_trigger, orderPx=sl_trigger)
             with open(self._trades_path,"a",encoding="utf-8") as f: f.write(f"{int(time.time()*1000)},{self.cfg.inst_id},{sig.side},{px},{sl_trigger},{tp_trigger},{sz_total},{sig.reason}\n")
-            send_tg(f"ENTRY {self.cfg.inst_id} {sig.side} px={px} sl={sl_trigger} tp={tp_trigger} sz={sz_total}")
+            await send_tg(f"ENTRY {self.cfg.inst_id} {sig.side} px={px} sl={sl_trigger} tp={tp_trigger} sz={sz_total}")
             # trailing if enabled
             if self.cfg.trailing_be_rr or self.cfg.trailing_atr_mult:
                 asyncio.create_task(self._trailing_amend_loop(order_ids, sig))
@@ -804,12 +808,12 @@ class Bot:
                 # try amend orders; fallback cancel+new algo
                 for oid in ord_ids:
                     try:
-                        self.client.amend_order(instId=self.cfg.inst_id, ordId=oid, slTriggerPx=sl_trigger, slOrdPx=sl_trigger)
+                        await self.client.amend_order_async(instId=self.cfg.inst_id, ordId=oid, slTriggerPx=sl_trigger, slOrdPx=sl_trigger)
                     except Exception:
-                        self.client.cancel_algo(instId=self.cfg.inst_id, ordType="stop-loss")
-                        self.client.order_algo(instId=self.cfg.inst_id, tdMode=self.cfg.td_mode, posSide=("long" if sig.side=="LONG" else "short"), ordType="stop-loss", triggerPx=sl_trigger, orderPx=sl_trigger)
+                        await self.client.cancel_algo_async(instId=self.cfg.inst_id, ordType="stop-loss")
+                        await self.client.order_algo_async(instId=self.cfg.inst_id, tdMode=self.cfg.td_mode, posSide=("long" if sig.side=="LONG" else "short"), ordType="stop-loss", triggerPx=sl_trigger, orderPx=sl_trigger)
                 with open(os.path.join(self._log_dir,"trail.log"),"a",encoding="utf-8") as f: f.write(f"{int(time.time()*1000)},AMEND_OK,{sl_trigger}\n")
-                send_tg(f"TRAIL {self.cfg.inst_id} SL->{sl_trigger}")
+                await send_tg(f"TRAIL {self.cfg.inst_id} SL->{sl_trigger}")
             except Exception as e:
                 with open(os.path.join(self._log_dir,"trail.log"),"a",encoding="utf-8") as f: f.write(f"{int(time.time()*1000)},AMEND_FAIL,{sl_trigger}\n")
                 print("[TRAIL] amend error:", e)
