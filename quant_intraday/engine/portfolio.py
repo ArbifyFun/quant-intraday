@@ -39,8 +39,8 @@ class PortfolioOrchestrator:
         # watchdog
         async def watchdog():
             while True:
-                if self.guard.check():
-                    notify("portfolio_paused", {"reason":"dd_limit", "limit": self.dd_limit})
+                if await self.guard.check():
+                    await notify("portfolio_paused", {"reason":"dd_limit", "limit": self.dd_limit})
                     # in this simplified version, we just print; in practice, you'd stop tasks
                 await asyncio.sleep(10)
         tasks.append(asyncio.create_task(watchdog()))

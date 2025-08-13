@@ -1,13 +1,17 @@
-import os, json, httpx
+import os, json, httpx, logging
 
 WEBHOOK=os.getenv("QI_WEBHOOK_URL", None)
 
-def notify(event: str, payload: dict | None = None):
-    if not WEBHOOK: 
+logger=logging.getLogger(__name__)
+
+async def notify(event: str, payload: dict | None = None) -> bool:
+    if not WEBHOOK:
         return False
     try:
         body={"event": event, "payload": payload or {}}
-        httpx.post(WEBHOOK, json=body, timeout=5)
+        async with httpx.AsyncClient() as client:
+            await client.post(WEBHOOK, json=body, timeout=5)
         return True
-    except Exception:
+    except httpx.HTTPError as e:
+        logger.warning("notify failed: %s", e)
         return False

@@ -8,7 +8,7 @@ class GlobalRiskGuard:
 
     def tripped(self): return self._tripped
 
-    def check(self):
+    async def check(self):
         # Take latest equity*.csv if exists else return False
         import glob
         files=sorted(glob.glob(os.path.join(self.log_dir, "equity*.csv")))
@@ -19,7 +19,7 @@ class GlobalRiskGuard:
         dd = (eq/eq.cummax()-1.0).min()
         if dd <= -abs(self.dd_limit):
             if not self._tripped:
-                notify("global_dd_trip", {"dd": float(dd)})
+                await notify("global_dd_trip", {"dd": float(dd)})
             self._tripped=True
             return True
         return False
