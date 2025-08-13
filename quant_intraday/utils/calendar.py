@@ -45,7 +45,7 @@ class TradeCalendar:
         return out
 
     def is_open_now(self, now_utc: datetime | None = None):
-        now = now_utc or datetime.utcnow().replace(tzinfo=ZoneInfo("UTC"))
+        now = now_utc or datetime.now(ZoneInfo("UTC"))
         # extra windows (UTC) override
         for w in self.extra:
             try:

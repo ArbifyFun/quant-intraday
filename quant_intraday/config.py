@@ -8,7 +8,7 @@ class InstrumentCfg(BaseModel):
     risk_share: float = Field(default=1.0, ge=0.0, le=5.0)
 
 class PortfolioCfg(BaseModel):
-    instruments: List[InstrumentCfg] = []
+    instruments: List[InstrumentCfg] = Field(default_factory=list)
 
 class ExecCfg(BaseModel):
     mode: str = Field(default="autoexec", pattern=r"^(simple|slicer|optimizer|pov|lob|autoexec)$")

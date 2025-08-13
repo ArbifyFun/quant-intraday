@@ -204,7 +204,7 @@ class Bot:
             if df.empty: return 0.0
             # find first row of today (UTC)
             df['dt']=pd.to_datetime(df.get('dt', None) if 'dt' in df.columns else pd.to_datetime(df['ts'], unit='ms', utc=True))
-            today = pd.Timestamp.utcnow().normalize()
+            today = pd.Timestamp.now(tz="UTC").normalize()
             dft = df[df['dt']>=today]
             if dft.empty:
                 # if no today's row, take delta from first to last overall
@@ -555,7 +555,7 @@ class Bot:
                 except Exception: pass
                 # daily budget init
                 import datetime
-                now_dt = datetime.datetime.utcnow().date()
+                now_dt = datetime.datetime.now(datetime.timezone.utc).date()
                 if (self._day_key is None) or (now_dt != self._day_key):
                     eq0=self.client.get_balance("USDT"); self._budget=RiskBudget(eq0, self.risk_params); self._day_key=now_dt
                 # cooldown

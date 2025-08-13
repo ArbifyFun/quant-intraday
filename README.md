@@ -142,6 +142,9 @@ python scripts/supervisor.py --config live_manifest.yaml
 # Prometheus Exporter（默认 8008）
 python scripts/metrics_exporter.py --port 8008
 
+# 终端实时看板
+qi dashboard --live-dir live_output --refresh 1.0 --trades-limit 10  # 时间以 UTC 展示
+
 # 实盘 OOS 看板（HTML）
 python scripts/oos_dashboard.py
 

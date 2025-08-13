@@ -33,7 +33,7 @@ def main(live_dir="live_output", out_dir="replay"):
     html="<html><meta charset='utf-8'><body><h1>Execution Replay</h1>"
     html+=exe.tail(200).to_html(index=False)
     html+="<h2>Fills (tail)</h2>"+fills.tail(200).to_html(index=False)
-    with open(os.path.join(out_dir, "replay_%s.html"%dt.datetime.utcnow().strftime("%Y%m%d")), "w", encoding="utf-8") as f:
+    with open(os.path.join(out_dir, "replay_%s.html"%dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d")), "w", encoding="utf-8") as f:
         f.write(html)
     print("saved replay")
 

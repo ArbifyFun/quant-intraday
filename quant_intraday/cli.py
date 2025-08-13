@@ -27,17 +27,21 @@ def preflight():
 @app.command()
 def init():
     """Generate sample qi.yaml / portfolio.yaml / calendar.yaml if missing"""
-    import shutil, pathlib
+    import pathlib
+    from importlib import resources
+
     root = pathlib.Path(".")
-    for fn in ("qi.yaml","portfolio.yaml","calendar.yaml"):
-        src = root / fn
-        if not src.exists():
-            # copy from repo root defaults
-            try:
-                shutil.copyfile(fn, fn)
-            except Exception:
-                open(fn,"w").write("")
-            rprint(f"[cyan]created {fn}[/]")
+    for fn in ("qi.yaml", "portfolio.yaml", "calendar.yaml"):
+        dst = root / fn
+        if dst.exists():
+            continue
+        try:
+            with resources.files("quant_intraday.templates").joinpath(fn).open("rb") as src:
+                dst.write_bytes(src.read())
+            rprint(f"[cyan]created {fn} from template[/]")
+        except FileNotFoundError:
+            dst.write_text("", encoding="utf-8")
+            rprint(f"[yellow]template {fn} missing; created empty file[/]")
     rprint("[green]init done.[/]")
 
 @app.command()
@@ -79,10 +83,10 @@ def backtest(csv: str, strategy: str = "auto", inst: str = None, exec_mode: str 
     """Run backtest with execution model."""
     from .backtest.engine import Backtester, RiskParams
     import pandas as pd
-    df = pd.read_csv(csv, parse_dates=["dt"])
-    bt = Backtester(strategy=strategy, risk=RiskParams(), exec_mode=exec_mode, kyle_lambda=kyle_lambda, inst_id=inst)
-    res = bt.run(df)
-    rprint(res.tail())
+    df = pd.read_csv(csv, parse_dates=["dt"]).set_index("dt")
+    bt = Backtester(strategy=strategy, risk=RiskParams(), exec_mode=exec_mode, kyle_lambda=kyle_lambda)
+    res = bt.backtest(df)
+    rprint(res["summary"])
 
 @app.command()
 def autopilot():
@@ -109,6 +113,17 @@ def fetch_fb(inst: str = "BTC-USDT-SWAP", fut: str = "BTC-USDT-240927", out: str
     """Fetch funding/basis history to CSV."""
     import quant_intraday.scripts.fetch_okx_funding_basis as fb  # type: ignore
     fb.main(inst, fut, out)
+
+@app.command()
+def dashboard(
+    live_dir: str = typer.Option(None, help="实时数据目录，默认使用 QI_LOG_DIR"),
+    refresh: float = typer.Option(1.0, help="刷新间隔（秒）"),
+    trades_limit: int = typer.Option(5, help="最近成交显示条数"),
+):
+    """启动终端实时看板，展示权益、执行指标、仓位、信号与成交。"""
+    import quant_intraday.scripts.terminal_dashboard as td  # type: ignore
+
+    td.main(live_dir or os.getenv("QI_LOG_DIR", "live_output"), refresh, trades_limit)
 
 if __name__ == "__main__":
     app()

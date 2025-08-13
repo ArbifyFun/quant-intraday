@@ -1,0 +1,7 @@
+timezone: "Asia/Tokyo"
+silent_days:
+  - "2025-01-01"
+windows:
+  - "21:00-02:00"
+extra_windows:
+  - { start: "2025-08-13T12:00:00Z", end: "2025-08-13T17:00:00Z", label: "CPI extra open" }
