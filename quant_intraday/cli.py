@@ -289,3 +289,18 @@ def http_test(sim: bool = True):
         print("[OKX][DBG] text", r.text[:400])
     except Exception as e:
         print("http-test error:", repr(e))
+
+
+# Add monitor command for live monitoring
+@app.command()
+def monitor(
+    live_dir: str = typer.Option("live_output", help="Live output directory"),
+    interval: float = typer.Option(5.0, help="Refresh interval in seconds"),
+    once: bool = typer.Option(False, help="Print once and exit"),
+):
+    """
+    Display live equity, drawdown and trade count from the live output directory.
+    """
+    from .monitor import monitor_live_output
+    monitor_live_output(live_dir, interval, once)
+
