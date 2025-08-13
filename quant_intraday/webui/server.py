@@ -42,3 +42,37 @@ async def root(request: Request):
 @app.get("/healthz")
 async def healthz():
     return {"ok": True, "live_dir": str(LIVE_DIR)}
+            
+            # Simple stats endpoint
+@app.get("/stats", response_class=JSONResponse)
+async def stats():
+    """
+    Return the latest equity, drawdown and trade count.
+
+    This endpoint reads ``equity.csv`` and any ``trades_*.csv`` files from
+    the current ``LIVE_DIR`` directory and returns a JSON object with
+    the latest metrics.  Frontend dashboards or scripts may poll this
+    endpoint to obtain real-time status without parsing log files directly.
+    """
+    import pandas as pd, glob
+    eq_p = os.path.join(LIVE_DIR, "equity.csv")
+    eq = None
+    dd = None
+    if os.path.exists(eq_p):
+        try:
+            df = pd.read_csv(eq_p)
+            if len(df) > 0:
+                eq = float(df.iloc[-1, 1])
+                s = pd.Series(df.iloc[:, 1])
+                dd = float((s / s.cummax() - 1.0).iloc[-1])
+        except Exception:
+            pass
+    trades = 0
+    for f in glob.glob(os.path.join(LIVE_DIR, "trades_*.csv")):
+        try:
+            with open(f, "r", encoding="utf-8") as fh:
+                trades += max(sum(1 for _ in fh) - 1, 0)
+        except Exception:
+            pass
+    return {"equity": eq, "drawdown": dd, "trades": trades}
+

@@ -14,6 +14,22 @@
       <li><a href="/docs">/docs</a> – Auto‑generated OpenAPI explorer for all endpoints</li>
       <li><a href="/metrics">/metrics</a> – Prometheus metrics endpoint (if enabled)</li>
       <li><a href="/healthz">/healthz</a> – Healthcheck</li>
+          <li><a href="/stats">/stats</a> - Latest equity, drawdown, trades</li>
+    </ul>
+    <button id="refresh-stats">Refresh Stats</button>
+    <pre id="stats-output"></pre>
+    <script>
+    async function refreshStats() {
+      try {
+        const res = await fetch('/stats');
+        const data = await res.json();
+        document.getElementById('stats-output').textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        document.getElementById('stats-output').textContent = 'Error fetching stats: ' + err;
+      }
+    }
+    document.getElementById('refresh-stats').addEventListener('click', refreshStats);
+    </script>
       <li><a href="/static">/static</a> – Static assets</li>
     </ul>
   </div>
