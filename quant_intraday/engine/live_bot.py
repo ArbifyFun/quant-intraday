@@ -15,6 +15,7 @@ from ..utils.calendar import TradeCalendar
 from ..core.funding_basis import FundingBasisFeed
 from ..utils.vol_target import VolTarget
 from ..utils.perf_guard import PerformanceGuard
+from ..utils.talib_wrapper import ta
 from ..exchange.private_ws import OKXPrivateWS
 from ..exchange.okx_client import OKXClient
 from .slicer import SlicerExec
@@ -566,18 +567,6 @@ class Bot:
                 # quality filters: ATR/Volume percentiles on last 500 bars
                 try:
                     tail = df.tail(500)
-                    # Compute ATR and volume percentiles.  Prefer TA‑Lib but fall back to
-                    # our pure‑Python implementation if unavailable.  NumPy is already
-                    # imported as ``np`` at the module top.
-                    try:
-                        import talib as ta  # type: ignore
-                    except ImportError:
-                        from ..utils.talib_fallback import ATR as _ATR  # noqa: F401
-                        class _ta:
-                            @staticmethod
-                            def ATR(*args, **kwargs):
-                                return _ATR(*args, **kwargs)
-                        ta = _ta()  # type: ignore
                     c, h, l = tail["close"].to_numpy(), tail["high"].to_numpy(), tail["low"].to_numpy()
                     atr = ta.ATR(h, l, c, 14)
                     vol = tail["volume"].to_numpy()
@@ -667,16 +656,7 @@ class Bot:
         df=self.buffer.to_df().tail(100)
         try:
             c = df['close'].to_numpy(); h = df['high'].to_numpy(); l = df['low'].to_numpy()
-            # Use TA‑Lib if available; otherwise fall back to the pure‑Python ATR
-            try:
-                import talib as _ta  # type: ignore
-            except ImportError:
-                from ..utils.talib_fallback import ATR as _ATR  # noqa: F401
-                class _ta:
-                    @staticmethod
-                    def ATR(*args, **kwargs):
-                        return _ATR(*args, **kwargs)
-            atr = _ta.ATR(h, l, c, 14)[-1]
+            atr = ta.ATR(h, l, c, 14)[-1]
             atrp = atr / max(1e-9, c[-1])
         except Exception:
             atrp = 0.01
@@ -766,21 +746,6 @@ class Bot:
             print("[LIVE] order error:", e); self._err_times.append(time.time())
 
     async def _trailing_amend_loop(self, ord_ids, sig):
-        # We need ATR for trailing stop calculation; try TA‑Lib first,
-        # otherwise use our pure‑Python fallback.  If neither is available
-        # return early without trailing amendments.
-        try:
-            try:
-                import talib as ta  # type: ignore
-            except ImportError:
-                from ..utils.talib_fallback import ATR as _ATR  # noqa: F401
-                class _ta:
-                    @staticmethod
-                    def ATR(*args, **kwargs):
-                        return _ATR(*args, **kwargs)
-                ta = _ta()  # type: ignore
-        except Exception:
-            return
         step=10; last_sl=sig.sl
         while True:
             await asyncio.sleep(step)
