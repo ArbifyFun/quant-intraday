@@ -1,4 +1,5 @@
-import os, yaml
+import os
+import yaml
 from typing import List, Optional
 from pydantic import BaseModel, Field, field_validator, ValidationError
 
@@ -38,10 +39,15 @@ class QIConfig(BaseModel):
     portfolio: PortfolioCfg = PortfolioCfg()
     paths: PathsCfg = PathsCfg()
 
+
 def load_qi_config(path: str = "qi.yaml") -> QIConfig:
-    if not os.path.exists(path):
-        return QIConfig()
-    raw = yaml.safe_load(open(path, "r", encoding="utf-8")) or {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            raw = yaml.safe_load(f) or {}
+    except FileNotFoundError as e:
+        raise FileNotFoundError(f"Configuration file not found: {path}") from e
+    except yaml.YAMLError as e:
+        raise RuntimeError(f"Error parsing YAML configuration '{path}': {e}") from e
     try:
         return QIConfig(**raw)
     except ValidationError as e:
