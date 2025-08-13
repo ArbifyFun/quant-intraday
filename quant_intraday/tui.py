@@ -5,8 +5,12 @@ This module defines a 'run_tui' function that uses the 'rich' library
 to periodically query live metrics (equity, drawdown, trades) and display them
 in a dynamic table. It also calculates changes relative to the previous refresh
 and uses colored arrows to indicate the direction of change.
-"""
+
+Press 'p' to panic flatten (close all positions) and 'q' to quit the UI.
+
 import time
+import sys
+import select
 from typing import Optional
 
 from rich.console import Console
@@ -17,7 +21,10 @@ from .monitor import get_metrics
 
 def run_tui(live_dir: str = "live_output", interval: float = 2.0) -> None:
     """
+      """
     Run a terminal UI to display live equity, drawdown and trade count with change indicators.
+
+  
 
     :param live_dir: Directory where live output files (equity.csv, trades-*.csv) reside.
     :param interval: Refresh interval in seconds for updating the display.
@@ -112,6 +119,19 @@ def run_tui(live_dir: str = "live_output", interval: float = 2.0) -> None:
             table.rows.clear()
             for label, value in rows:
                 table.add_row(label, value)
+    # Check for user input commands
+    if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+        cmd = sys.stdin.read(1).strip().lower()
+        if cmd == "p":
+            try:
+                from quant_intraday.scripts.panic_flatten import main as panic_flatten_main
+                panic_flatten_main()
+            except Exception as e:
+                console.print(f"[red]Error during panic flatten: {e}[/]")
+        elif cmd == "q":
+            break
 
+      k
+   
             # Sleep until next refresh
             time.sleep(interval)
