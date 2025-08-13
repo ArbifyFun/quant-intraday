@@ -1,0 +1,3 @@
+recursive-include quant_intraday/webui/templates *
+recursive-include quant_intraday/webui/static *
+recursive-include quant_intraday *.yaml

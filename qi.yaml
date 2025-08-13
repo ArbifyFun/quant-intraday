@@ -1,0 +1,29 @@
+# Master config for `qi run`
+exchange:
+  name: okx
+  simulated: false  # or true to send x-simulated-trading: 1
+  account: trade
+risk:
+  risk_pct: 0.007
+  dd_limit: 0.08
+  vol_target_daily: 0.02
+  time_windows: "21:00-02:00"
+execution:
+  mode: autoexec   # simple|slicer|optimizer|pov|lob|autoexec
+  prate: 0.12
+  slice_timeout: 3
+portfolio:
+  instruments:
+    - inst: BTC-USDT-SWAP
+      tf: 5m
+      risk_share: 1.0
+    - inst: ETH-USDT-SWAP
+      tf: 5m
+      risk_share: 0.8
+    - inst: SOL-USDT-SWAP
+      tf: 5m
+      risk_share: 0.6
+paths:
+  calendar: calendar.yaml
+  portfolio: portfolio.yaml
+  live_dir: live_output

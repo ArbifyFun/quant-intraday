@@ -1,0 +1,10 @@
+version: "3.8"
+services:
+  quant:
+    build: .
+    env_file: .env
+    volumes:
+      - ./live_output:/app/live_output
+      - ./calib:/app/calib
+    ports:
+      - "8008:8008"

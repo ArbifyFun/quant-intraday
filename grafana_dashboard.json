@@ -1,0 +1,63 @@
+{
+  "title": "Quant Intraday OOS",
+  "panels": [
+    {
+      "type": "graph",
+      "title": "Equity",
+      "targets": [
+        {
+          "expr": "qi_equity"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Drawdown",
+      "targets": [
+        {
+          "expr": "qi_drawdown"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Recent Trades",
+      "targets": [
+        {
+          "expr": "qi_recent_trades"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Amend OK",
+      "targets": [
+        {
+          "expr": "increase(qi_amend_ok[1h])"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Amend Fail",
+      "targets": [
+        {
+          "expr": "increase(qi_amend_fail[1h])"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Risk Denies",
+      "targets": [
+        {
+          "expr": "increase(qi_risk_deny[1h])"
+        }
+      ]
+    }
+  ],
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  }
+}

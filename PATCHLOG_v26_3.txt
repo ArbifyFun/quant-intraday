@@ -1,0 +1,21 @@
+v26.3 Patch:
+- Fixed lob_executor.py one-line compound statement causing SyntaxError.
+
+Auto-fixed other potential issues:
+  - quant_intraday/engine/live_bot.py
+  - quant_intraday/engine/pov_executor.py
+  - quant_intraday/backtest/engine.py
+  - quant_intraday/utils/portfolio_guard.py
+  - quant_intraday/webui/server.py
+
+Syntax compile errors remaining:
+  * quant_intraday/engine/live_bot.py -> Sorry: IndentationError: unexpected indent (live_bot.py, line 30)
+  * quant_intraday/engine/pov_executor.py ->   File "/mnt/data/quant_intraday_toolkit_v26_3/quant_intraday/engine/pov_executor.py", line 38
+    if queue too large near best, allow 1-tick cross on last chunk
+             ^^^
+SyntaxError: invalid syntax
+
+  * quant_intraday/engine/lob_executor.py -> Sorry: IndentationError: unexpected indent (lob_executor.py, line 43)
+  * quant_intraday/backtest/engine.py -> Sorry: IndentationError: unexpected indent (engine.py, line 127)
+  * quant_intraday/utils/portfolio_guard.py -> Sorry: IndentationError: unexpected indent (portfolio_guard.py, line 52)
+  * quant_intraday/webui/server.py -> Sorry: IndentationError: expected an indented block after function definition on line 33 (server.py, line 35)

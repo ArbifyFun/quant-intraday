@@ -1,0 +1,19 @@
+# Per-instrument overrides (tick/lot/fee/aggressiveness)
+BTC-USDT-SWAP:
+  taker_bps: 6.0
+  maker_bps: 2.0
+  tick_size: 0.1
+  lot_size: 1
+  entry_aggr_ticks: 1
+ETH-USDT-SWAP:
+  taker_bps: 6.0
+  maker_bps: 2.0
+  tick_size: 0.05
+  lot_size: 1
+  entry_aggr_ticks: 1
+SOL-USDT-SWAP:
+  taker_bps: 6.0
+  maker_bps: 2.0
+  tick_size: 0.001
+  lot_size: 1
+  entry_aggr_ticks: 2

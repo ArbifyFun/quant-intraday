@@ -1,0 +1,66 @@
+version: '3.9'
+services:
+  trader:
+    build: .
+    env_file: .env
+    environment:
+      - QI_METRICS_URL=http://metrics:9000/metrics
+    command: ["qi","run","--cfg","qi.yaml"]
+    volumes:
+      - ./live_output:/app/live_output
+    restart: unless-stopped
+
+  autopilot:
+    build: .
+    env_file: .env
+    environment:
+      - QI_METRICS_URL=http://metrics:9000/metrics
+    command: sh -c "while true; do qi autopilot; sleep 3600; done"
+    volumes:
+      - ./live_output:/app/live_output
+    restart: unless-stopped
+
+  metrics:
+    build: .
+    env_file: .env
+    environment:
+      - QI_METRICS_URL=http://metrics:9000/metrics
+    command: ["qi","metrics"]
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./live_output:/app/live_output
+    restart: unless-stopped
+
+
+  webui:
+    build: .
+    env_file: .env
+    environment:
+      - QI_METRICS_URL=http://metrics:9000/metrics
+    command: ["qi","web","--host","0.0.0.0","--port","8080"]
+    ports: ["8080:8080"]
+    volumes: ["./live_output:/app/live_output"]
+    restart: unless-stopped
+
+
+  push:
+    build: .
+    env_file: .env
+    command: ["qi","push"]
+    volumes: ["./live_output:/app/live_output"]
+    restart: unless-stopped
+
+  kpi:
+    build: .
+    env_file: .env
+    command: ["qi","kpi"]
+    volumes: ["./live_output:/app/live_output"]
+    restart: unless-stopped
+
+  autotune:
+    build: .
+    env_file: .env
+    command: ["python","scripts/exec_autotune.py"]
+    volumes: ["./live_output:/app/live_output"]
+    restart: unless-stopped

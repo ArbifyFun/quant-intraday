@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quant-intraday"
+version = "0.19.0"
+description = "Crypto intraday trading toolkit with unified CLI (OKX)"
+authors = [{name="arbify.fun"}]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "python-multipart>=0.0.9",
+    "Jinja2>=3.1",
+    "python-dotenv>=1.0",
+    "uvicorn>=0.24",
+  "pandas>=2.0",
+  "numpy>=1.24",
+  "httpx>=0.24",
+  "websockets>=11.0",
+  "python-dateutil>=2.8",
+  "PyYAML>=6.0",
+  "typer>=0.12",
+  "rich>=13.0",
+  "prometheus-client>=0.16",
+  "pydantic>=2.6",
+  "TA-Lib>=0.4.28",
+  "fastapi>=0.111",
+]
+
+[project.urls]
+Homepage = "https://example.com/quant-intraday"
+
+[project.scripts]
+qi = "quant_intraday.cli:app"
+
+[tool.setuptools.packages.find]
+include = ["quant_intraday*"]
+exclude = ["live_output*", "tests*", "examples*"]
