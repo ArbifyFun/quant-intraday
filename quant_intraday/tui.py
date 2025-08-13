@@ -6,7 +6,7 @@ to periodically query live metrics (equity, drawdown, trades) and display them
 in a dynamic table. It also calculates changes relative to the previous refresh
 and uses colored arrows to indicate the direction of change.
 
-Press 'p' to panic flatten (close all positions) and 'q' to quit the UI.
+Press 'p' to panic flatten (close all positions) and 'q' to quit the UI."""
 
 import time
 import sys
