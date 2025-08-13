@@ -6,7 +6,7 @@ to periodically query live metrics (equity, drawdown, trades) and display them
 in a dynamic table. It also calculates changes relative to the previous refresh
 and uses colored arrows to indicate the direction of change.
 
-Press 'p' to panic flatten (close all posit 'q' t ando quit the TUI.
+Press 'p' to panic flatten (close all positions), press 'q' to quit the TUI, and press 'h' or '?' to show help.
 """
 import time
 import sys
@@ -39,10 +39,23 @@ def run_tui(live_dir: str = "live_output", interval: float = 2.0) -> None:
     prev_drawdown: Optional[float] = None
     prev_trades: Optional[int] = None
 
+    baseline_equity: Optional[float] = None
+prev_pnl: Optional[float] = None
     # Determine refresh rate for Live (at least 1)
     refresh_rate = max(1, int(1 / interval)) if interval > 0 else 1
 
     with Live(table, console=console, refresh_per_second=refresh_rate):
+ 
+  
+            # Initialize baseline equity
+            if baseline_equity is None and equity is not None:
+                baseline_equity = equity
+            # Compute PnL based on baseline equity
+            if baseline_equity is not None and equity is not None:
+                pnl = equity - baseline_equity
+            else:
+                pnl = None
+
         while True:
             metrics = get_metrics(live_dir)
             equity = metrics.get("equity")
@@ -57,6 +70,7 @@ def run_tui(live_dir: str = "live_output", interval: float = 2.0) -> None:
                 if prev_equity is None:
                     eq_display = f"{equity:.2f}"
                 else:
+     
                     delta = equity - prev_equity
                     if delta > 0:
                         arrow = "\u25B2"
