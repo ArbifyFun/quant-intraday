@@ -1,6 +1,11 @@
-import os, json, hmac, hashlib, base64, time, asyncio, websockets
+import os, json, hmac, hashlib, base64, time, asyncio, websockets, logging
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, Callable
+
+from ..utils import logger as qi_logger
+
+qi_logger.maybe_enable()
+logger = logging.getLogger(__name__)
 
 OKX_WSS_PRIVATE = "wss://ws.okx.com:8443/ws/v5/private"
 
@@ -23,9 +28,11 @@ class OKXPrivateWS:
         await ws.send(json.dumps({"op":"login","args":[{"apiKey":self.key,"passphrase":self.passphrase,"timestamp":ts,"sign":sign}]}))
     async def run(self):
         subs={"op":"subscribe","args":[{"channel":"account"},{"channel":"positions"},{"channel":"orders"}]}
+        retries=0; delay=2
         while not self._stop:
             try:
                 async with websockets.connect(OKX_WSS_PRIVATE, ping_interval=20) as ws:
+                    retries=0; delay=2
                     await self._login(ws); await ws.send(json.dumps(subs))
                     async for msg in ws:
                         data=json.loads(msg)
@@ -35,9 +42,10 @@ class OKXPrivateWS:
                             if ch=="account": self.state.account=d
                             elif ch=="positions": self.state.positions[f"{d.get('instId','')}|{d.get('posSide','')}"]=d
                             elif ch=="orders": self.state.orders[d.get("ordId","")] = d
-                            if self.on_event: 
+                            if self.on_event:
                                 try: self.on_event(ch,d,self.state)
                                 except Exception: pass
             except Exception as e:
-                print("Private WS reconnect:", e); await asyncio.sleep(2)
+                retries+=1; logger.warning("Private WS reconnect #%d in %.1fs: %s", retries, delay, e)
+                await asyncio.sleep(delay); delay=min(delay*2,60)
     def stop(self): self._stop=True
