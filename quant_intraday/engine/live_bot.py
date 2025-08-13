@@ -603,7 +603,7 @@ class Bot:
                     with open(os.path.join(self._log_dir,"risk.log"),"a",encoding="utf-8") as f: f.write(f"{int(time.time()*1000)},BLOCK,{label}\n")
                     try:
                         from ..utils.notifier import notify
-                        notify('risk_block', {'label':label})
+                        await notify('risk_block', {'label':label})
                     except Exception: pass
                     continue
                 # refresh adaptive weights & alloc & thresholds
