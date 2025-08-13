@@ -6,6 +6,7 @@ from ..core.strategies import (StrategyTrend, StrategyVWAPRevert, StrategyIBBrea
                                StrategyPullbackTrend, StrategyRangeScalper, StrategyFailBreakoutReversal,
                                AutoRouter)
 from ..utils.risk import RiskParams
+from ..utils.talib_wrapper import ta
 
 @dataclass
 class Trade:
@@ -102,51 +103,13 @@ class Backtester:
         return (min(i_entry+self.max_bars, len(df)-1), float(df.iloc[min(i_entry+self.max_bars, len(df)-1)]["close"]), "TIME")
 
     def backtest(self, df: pd.DataFrame, equity0: float = 10_000.0) -> Dict:
+        """Execute a vectorised backtest over a DataFrame of OHLCV bars.
+
+        Technical indicators are provided via :mod:`quant_intraday.utils.talib_wrapper`
+        which uses the official ``talib`` package when available and otherwise
+        falls back to the minimal pure-Python implementations in
+        ``quant_intraday.utils.talib_fallback``.
         """
-        Execute a vectorised backtest over a DataFrame of OHLCV bars.
-
-        The backtester attempts to import the `TA‑Lib` C extension for
-        indicator calculations.  If `TA‑Lib` is not installed (for example
-        in restricted execution environments), the code falls back to
-        pure‑Python implementations in ``quant_intraday.utils.talib_fallback``.
-        This fallback supports the subset of indicators required by the
-        toolkit.  See that module for more details.
-        """
-        # Try to use the real TA‑Lib library.  If unavailable, construct
-        # a minimal object exposing the necessary indicator functions from
-        # our fallback module.  The underscore prefix avoids polluting
-        # local namespace with utility names.
-        try:
-            import talib as ta  # type: ignore
-        except ImportError:
-            from ..utils.talib_fallback import (
-                EMA as _EMA,
-                ATR as _ATR,
-                RSI as _RSI,
-                BBANDS as _BBANDS,
-                OBV as _OBV,
-            )  # noqa: F401
-            class _Fallback:
-                @staticmethod
-                def EMA(*args, **kwargs):
-                    return _EMA(*args, **kwargs)
-
-                @staticmethod
-                def ATR(*args, **kwargs):
-                    return _ATR(*args, **kwargs)
-
-                @staticmethod
-                def RSI(*args, **kwargs):
-                    return _RSI(*args, **kwargs)
-
-                @staticmethod
-                def BBANDS(*args, **kwargs):
-                    return _BBANDS(*args, **kwargs)
-
-                @staticmethod
-                def OBV(*args, **kwargs):
-                    return _OBV(*args, **kwargs)
-            ta = _Fallback()
         equity=equity0; trades=[]
         c,h,l = df["close"].to_numpy(), df["high"].to_numpy(), df["low"].to_numpy()
         atr = pd.Series(ta.ATR(h,l,c,14), index=df.index)

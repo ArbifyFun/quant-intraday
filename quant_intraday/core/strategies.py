@@ -1,43 +1,7 @@
 import numpy as np
 import pandas as pd
 
-# Attempt to import the C extension for technical indicators.  If unavailable
-# fall back to our pure‑Python implementations in utils.talib_fallback.  This
-# wrapper makes it transparent for the rest of the strategy code to call
-# indicator functions via ``ta.<func>``.
-try:
-    import talib as ta  # type: ignore
-except ImportError:
-    from ..utils.talib_fallback import (
-        EMA as _EMA,
-        ATR as _ATR,
-        RSI as _RSI,
-        BBANDS as _BBANDS,
-        OBV as _OBV,
-    )  # noqa: F401
-
-    class _Fallback:
-        @staticmethod
-        def EMA(*args, **kwargs):
-            return _EMA(*args, **kwargs)
-
-        @staticmethod
-        def ATR(*args, **kwargs):
-            return _ATR(*args, **kwargs)
-
-        @staticmethod
-        def RSI(*args, **kwargs):
-            return _RSI(*args, **kwargs)
-
-        @staticmethod
-        def BBANDS(*args, **kwargs):
-            return _BBANDS(*args, **kwargs)
-
-        @staticmethod
-        def OBV(*args, **kwargs):
-            return _OBV(*args, **kwargs)
-
-    ta = _Fallback()
+from ..utils.talib_wrapper import ta
 from .common import Signal
 
 class BaseStrategy:
