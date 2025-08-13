@@ -1,3 +1,81 @@
+# Quant Intraday Toolkit (v26_20a patched)
+
+This is a production-ready **crypto intraday trading toolkit** targeting BTC/ETH/SOL on OKX (REST + WebSocket),
+with **portfolio orchestrator**, **strategy router**, **risk engine**, **OKX demo/live support**, and a **FastAPI Web UI**.
+
+This patch consolidates your v26_20a code and fixes:
+- OKX REST signing & timestamp drift (50112) handling
+- WebSocket URL selection for demo/live + optional proxies
+- `qi http-test` guaranteed (alias registered)
+- `python-socks` added (WS SOCKS proxy support)
+- Better `bootstrap.sh` (creates & activates venv, installs extras)
+- Completed Web UI static/templates mounting
+- Packaging exclusions, `.gitignore`, Docker notes
+
+## Quickstart (macOS/Linux, zsh/bash)
+
+```bash
+git clone <your-repo>
+cd quant_intraday_toolkit_v26_20a_patched
+./bootstrap.sh
+source .venv/bin/activate
+# Fill your .env (OKX_API_KEY/SECRET/PASSPHRASE, OKX_SIMULATED=1 for demo)
+qi check
+qi http-test           # sanity call: /account/balance
+qi web --host 0.0.0.0 --port 8080
+```
+
+## Environment (.env)
+
+```
+OKX_API_KEY=...
+OKX_API_SECRET=...
+OKX_API_PASSPHRASE=...
+OKX_ACCOUNT=trade
+OKX_SIMULATED=1                # 1 = demo/sandbox; unset or 0 = live
+# Proxy (optional)
+QI_PROXY_MODE=explicit         # off|env|explicit
+QI_HTTP_PROXY=http://127.0.0.1:7890
+QI_HTTPS_PROXY=http://127.0.0.1:7890
+QI_WS_PROXY=socks5://127.0.0.1:1080
+# Misc
+QI_DEBUG_HTTP=1
+QI_WEB_TOKEN=change-me
+QI_LOG_DIR=live_output
+TZ=Asia/Tokyo
+```
+
+## CLI
+
+```
+qi check         # env & connectivity; writes live_output/preflight.json
+qi doctor        # code sanity (wss urls/proxy hooks)
+qi http-test     # REST sanity; prints status & body
+qi run           # run portfolio from qi.yaml
+qi backtest --csv your.csv --strategy auto --inst BTC-USDT-SWAP
+qi web           # serve FastAPI Web UI
+```
+
+## Docker
+
+```bash
+# Build
+docker build -t qi:latest .
+# Run Web UI
+docker run --rm -p 8080:8080 --env-file .env -v $PWD/live_output:/app/live_output qi:latest qi web --host 0.0.0.0 --port 8080
+```
+
+## Notes
+
+- **Demo vs Live** is controlled by `OKX_SIMULATED`. Demo uses OKX *demo* REST base and WS addresses, with header `x-simulated-trading: 1`.
+- If mainland access blocks OKX, set `QI_PROXY_MODE=explicit` and set the three proxy envs.
+- The Web UI requires `uvicorn` & `jinja2` (bundled); static assets live in `quant_intraday/webui/static/`.
+
+---
+
+Below is the original README content for reference:
+
+---
 # Quant Intraday (Crypto, TA-Lib) — v7
 
 **策略池**：`trend / pullback / range / vwap / ib / squeeze / fbr / obi / mi / auto(调度器)`  
@@ -386,4 +464,5 @@ OKX_DEMO_BROKER_ID=9999
 ### 环境加载策略（v26.18）
 - 启动时会用 `find_dotenv(usecwd=True)` 向上查找最近的 `.env`，自动加载（不会覆盖已导出的环境变量）。
 - 你可以用 `qi env` 查看当前生效的环境变量（秘钥字段做了脱敏）。
+
 

@@ -1,7 +1,7 @@
 # Master config for `qi run`
 exchange:
   name: okx
-  simulated: false  # or true to send x-simulated-trading: 1
+  simulated: true  # or true to send x-simulated-trading: 1
   account: trade
 risk:
   risk_pct: 0.007

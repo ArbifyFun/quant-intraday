@@ -256,7 +256,7 @@ def env():
     print(json.dumps({"cwd": os.getcwd(), "dotenv": cfg_path, "env": masked}, ensure_ascii=False, indent=2))
 
 
-@app.command()
+@app.command(name='http-test')
 def http_test(sim: bool = True):
     """One-shot GET /account/balance with debug prints (masking secrets)."""
     import os, json
