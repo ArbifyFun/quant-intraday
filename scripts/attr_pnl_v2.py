@@ -98,7 +98,7 @@ def main(out_dir="attrib"):
     trips=round_trips(fills)
     res=join_intents(trips, intents)
     by_inst, by_strat = buckets(res) if not res.empty else (res,res)
-    day=dt.datetime.utcnow().strftime("%Y%m%d")
+    day=dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d")
     res.to_csv(os.path.join(out_dir, f"positions_{day}.csv"), index=False)
     html="<html><meta charset='utf-8'><body><h1>Attribution v2</h1>"
     def tbl(df, title):

@@ -23,16 +23,16 @@ class Trade:
 
 class ExecModel:
     @staticmethod
-    def price(entry_px, side, tick, kyle_lambda=0.0, size_units=1.0, spread=0.0, mode="simple"):
-        # simple: t+1 open +- slippage ticks
-        if mode=="simple":
+    def price(entry_px, side, kyle_lambda=0.0, size_units=1.0, spread=0.0, mode="simple"):
+        # simple: t+1 open
+        if mode == "simple":
             return entry_px
         # kyle: impact = lambda * size
         imp = kyle_lambda * size_units
-        if side=="LONG":
-            return entry_px + imp + spread/2.0
+        if side == "LONG":
+            return entry_px + imp + spread / 2.0
         else:
-            return entry_px - imp - spread/2.0
+            return entry_px - imp - spread / 2.0
 
 def estimate_spread(df_slice):
     mid = (df_slice["high"]+df_slice["low"])/2.0
@@ -165,7 +165,7 @@ class Backtester:
             entry=float(nxt["open"])
             # modelled execution impact
             spr = estimate_spread(df.iloc[max(0,i-200):i+1])
-            entry = ExecModel.price(entry, sig.side, self.tick_size, self.kyle_lambda, size_units=1.0, spread=spr, mode=self.exec_mode)
+            entry = ExecModel.price(entry, sig.side, self.kyle_lambda, size_units=1.0, spread=spr, mode=self.exec_mode)
             rr = abs(entry - sig.sl); 
             if rr<=1e-9: continue
             size=self._pos_size(equity, entry, sig.sl)

@@ -43,7 +43,7 @@ def main(live_dir="live_output", out_dir="recon"):
         diff = None if intended_price is None else float(exec_px) - float(intended_price)
         out_rows.append({"dt":ts, "inst":inst, "side":side, "exec_px":exec_px, "intended_px":intended_price, "slippage":diff, "trade_id": f.get("tradeId")})
     recon=pd.DataFrame(out_rows).sort_values("dt")
-    day=dt.datetime.utcnow().strftime("%Y%m%d")
+    day=dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d")
     recon.to_csv(os.path.join(out_dir, f"reconciled_{day}.csv"), index=False)
     # html summary
     slip = recon["slippage"].dropna()

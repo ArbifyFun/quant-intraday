@@ -79,7 +79,7 @@ def main(out_dir="attrib"):
     intents=load_intents()
     trips=round_trips(fills)
     res=join_intents(trips, intents)
-    day=dt.datetime.utcnow().strftime("%Y%m%d")
+    day=dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d")
     csvp=os.path.join(out_dir, f"positions_{day}.csv"); res.to_csv(csvp, index=False)
     # HTML report
     s=dict(n=len(res), pnl=float(res["pnl_units"].sum() if len(res)>0 else 0.0),

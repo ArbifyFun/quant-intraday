@@ -35,6 +35,7 @@
 | **reconcile.py** | 类似于归因脚本，用于每日对账。拉取 OKX fills 与本地日志比对，输出每日执行报告和对账文件。 |
 | **make_report.py** | 对回测结果生成 HTML 报告，包括净值曲线、最大回撤、按小时胜率等图表。 |
 | **exec_replay.py** | 基于执行日志和成交记录，重构订单生命周期并生成交互式回放 HTML，便于复盘单次交易全过程。 |
+| **terminal_dashboard.py** | 基于 Rich 的终端实时看板，彩色展示权益、执行指标、仓位、信号与成交，支持自定义刷新间隔与成交行数，时间戳为 UTC。 |
 | **oos_dashboard.py** | 创建组合实盘的实时看板，将收益、回撤等指标绘制为 HTML 图表，适合独立部署。 |
 | **metrics_exporter.py** | 解析实时生成的日志文件并导出 Prometheus 指标，如委托数、撤单数、填单率、策略 PnL 等。可部署为守护进程供 Grafana 监控。 |
 | **telegram_report.py** / **feishu_card.py** | 定时抓取实盘或回测数据并推送到 Telegram 或飞书，支持图片形式和卡片形式。 |

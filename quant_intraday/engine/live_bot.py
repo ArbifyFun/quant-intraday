@@ -204,7 +204,7 @@ class Bot:
             if df.empty: return 0.0
             # find first row of today (UTC)
             df['dt']=pd.to_datetime(df.get('dt', None) if 'dt' in df.columns else pd.to_datetime(df['ts'], unit='ms', utc=True))
-            today = pd.Timestamp.utcnow().normalize()
+            today = pd.Timestamp.now(tz="UTC").normalize()
             dft = df[df['dt']>=today]
             if dft.empty:
                 # if no today's row, take delta from first to last overall
@@ -438,7 +438,9 @@ class Bot:
         self.risk_params=cfg.risk_params
         self.scale_legs=[float(x) for x in (cfg.scale_legs.split(",") if cfg.scale_legs else ["100"])]
         self._budget=None; self._day_key=None
-        self._pguard=PortfolioGuard(PortfolioLimits())
+        # Risk and performance guards
+        self._portfolio_guard=PortfolioGuard(PortfolioLimits())
+        self._perf_guard = PerformanceGuard(self._log_dir)
         self._events=EventGuard()
         self._calendar=TradeCalendar()
         self._books=None
@@ -461,7 +463,6 @@ class Bot:
         self._cancel_used_1m=0
         self._fb=FundingBasisFeed()
         self._volt=VolTarget(target_daily=0.02)
-        self._pguard=PerformanceGuard(self._log_dir)
         # _log_dir has been initialised above and directories created; do not reassign here
         self._trades_path=os.path.join(self._log_dir, f"trades_{cfg.inst_id.replace('/','-')}.csv")
         if not os.path.exists(self._trades_path):
@@ -551,11 +552,11 @@ class Bot:
                 try:
                     eq=self.client.get_balance("USDT")
                     with open(self._eq_path,"a",encoding="utf-8") as f: f.write(f"{int(time.time()*1000)},{eq}\n")
-                    self._pguard.open_day(eq); self._pguard.mark_pnl(eq)
+                    self._portfolio_guard.open_day(eq); self._portfolio_guard.mark_pnl(eq)
                 except Exception: pass
                 # daily budget init
                 import datetime
-                now_dt = datetime.datetime.utcnow().date()
+                now_dt = datetime.datetime.now(datetime.timezone.utc).date()
                 if (self._day_key is None) or (now_dt != self._day_key):
                     eq0=self.client.get_balance("USDT"); self._budget=RiskBudget(eq0, self.risk_params); self._day_key=now_dt
                 # cooldown
@@ -698,11 +699,17 @@ class Bot:
             print('[RISK] account guard deny entry'); return
         inst=self.client.get_instrument(self.cfg.inst_id)
         worst_per_unit=abs(sig.price-sig.sl)*float(inst.get("ctVal"))
+        # performance guard: pause entries on poor recent performance
+        if self._perf_guard.should_pause():
+            print("[Risk] Performance guard active")
+            with open(os.path.join(self._log_dir,"risk.log"),"a",encoding="utf-8") as f:
+                f.write(f"{int(time.time()*1000)},PERF\n")
+            return
         if self._budget and not self._budget.can_open(risk_amt):
-            print("[Risk] Daily budget exhausted"); 
+            print("[Risk] Daily budget exhausted");
             with open(os.path.join(self._log_dir,"risk.log"),"a",encoding="utf-8") as f: f.write(f"{int(time.time()*1000)},BUDGET\n")
             return
-        if not self._pguard.can_enter(self.cfg.inst_id, risk_amt):
+        if not self._portfolio_guard.can_enter(self.cfg.inst_id, risk_amt):
             print("[Risk] Portfolio deny"); 
             with open(os.path.join(self._log_dir,"risk.log"),"a",encoding="utf-8") as f: f.write(f"{int(time.time()*1000)},PPORT\n")
             return
@@ -718,7 +725,7 @@ class Bot:
             with open(self._trades_path,"a",encoding="utf-8") as f: f.write(f"{int(time.time()*1000)},{self.cfg.inst_id},{sig.side},{px},{sl_trigger},{tp_trigger},{sz_total},{sig.reason}\n")
             send_tg(f"ENTRY {self.cfg.inst_id} {sig.side} px={px} sl={sl_trigger} tp={tp_trigger} sz={sz_total}")
             if self._budget: self._budget.consume(risk_amt)
-            self._pguard.consume(self.cfg.inst_id, risk_amt)
+            self._portfolio_guard.consume(self.cfg.inst_id, risk_amt)
             return
         # live placement
         try:
@@ -761,7 +768,7 @@ class Bot:
             if self.cfg.trailing_be_rr or self.cfg.trailing_atr_mult:
                 asyncio.create_task(self._trailing_amend_loop(order_ids, sig))
             if self._budget: self._budget.consume(risk_amt)
-            self._pguard.consume(self.cfg.inst_id, risk_amt)
+            self._portfolio_guard.consume(self.cfg.inst_id, risk_amt)
         except Exception as e:
             print("[LIVE] order error:", e); self._err_times.append(time.time())
 

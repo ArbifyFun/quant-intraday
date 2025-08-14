@@ -11,6 +11,7 @@ qi multi --cfg portfolio.yaml ...          # 按 portfolio.yaml 启动多品种
 qi backtest --csv data.csv ...             # CSV 回测入口
 qi autopilot                               # 执行权重/冷却/阈值自调
 qi metrics                                 # 暴露 Prometheus 指标服务（默认 :9000）
+qi dashboard --live-dir live_output --refresh 1.0 --trades-limit 10  # 启动彩色终端看板，监控权益/指标/仓位/信号/成交（时间为 UTC）
 qi replay                                  # 重建执行时间线，生成 HTML 回放
 qi kpi                                     # 从 execlog 生成执行 KPI JSON
 qi module-info                             # 调试工具，打印模块导入路径和 Bot 属性
