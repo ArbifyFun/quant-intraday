@@ -1,11 +1,23 @@
 import pandas as pd, numpy as np
 from dataclasses import dataclass
 from typing import Optional, Dict, List, Tuple
-from ..core.strategies import (StrategyTrend, StrategyVWAPRevert, StrategyIBBreakout,
-                               StrategyOBIMomentum, StrategyMomentumIgnition, StrategySqueezeBreakout,
-                               StrategyPullbackTrend, StrategyRangeScalper, StrategyFailBreakoutReversal,
-                               AutoRouter)
+
+from ..core.strategies import (
+    StrategyTrend,
+    StrategyVWAPRevert,
+    StrategyIBBreakout,
+    StrategyOBIMomentum,
+    StrategyMomentumIgnition,
+    StrategySqueezeBreakout,
+    StrategyPullbackTrend,
+    StrategyRangeScalper,
+    StrategyFailBreakoutReversal,
+    AutoRouter,
+)
 from ..utils.risk import RiskParams
+from ..utils.indicators import get_ta
+
+ta = get_ta()
 
 @dataclass
 class Trade:
@@ -105,49 +117,13 @@ class Backtester:
         """
         Execute a vectorised backtest over a DataFrame of OHLCV bars.
 
-        The backtester attempts to import the `TA‑Lib` C extension for
-        indicator calculations.  If `TA‑Lib` is not installed (for example
-        in restricted execution environments), the code falls back to
-        pure‑Python implementations in ``quant_intraday.utils.talib_fallback``.
-        This fallback supports the subset of indicators required by the
-        toolkit.  See that module for more details.
+        The backtester uses :func:`quant_intraday.utils.indicators.get_ta` to
+        provide access to indicator functions.  This helper returns the real
+        ``talib`` module when available and otherwise falls back to pure Python
+        implementations, ensuring consistent behaviour across environments.
         """
-        # Try to use the real TA‑Lib library.  If unavailable, construct
-        # a minimal object exposing the necessary indicator functions from
-        # our fallback module.  The underscore prefix avoids polluting
-        # local namespace with utility names.
-        try:
-            import talib as ta  # type: ignore
-        except ImportError:
-            from ..utils.talib_fallback import (
-                EMA as _EMA,
-                ATR as _ATR,
-                RSI as _RSI,
-                BBANDS as _BBANDS,
-                OBV as _OBV,
-            )  # noqa: F401
-            class _Fallback:
-                @staticmethod
-                def EMA(*args, **kwargs):
-                    return _EMA(*args, **kwargs)
-
-                @staticmethod
-                def ATR(*args, **kwargs):
-                    return _ATR(*args, **kwargs)
-
-                @staticmethod
-                def RSI(*args, **kwargs):
-                    return _RSI(*args, **kwargs)
-
-                @staticmethod
-                def BBANDS(*args, **kwargs):
-                    return _BBANDS(*args, **kwargs)
-
-                @staticmethod
-                def OBV(*args, **kwargs):
-                    return _OBV(*args, **kwargs)
-            ta = _Fallback()
-        equity=equity0; trades=[]
+        equity = equity0
+        trades = []
         c,h,l = df["close"].to_numpy(), df["high"].to_numpy(), df["low"].to_numpy()
         atr = pd.Series(ta.ATR(h,l,c,14), index=df.index)
 

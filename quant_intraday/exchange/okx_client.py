@@ -8,11 +8,23 @@ def okx_sign(ts: str, method: str, path: str, body: str, secret: str) -> str:
     return base64.b64encode(mac).decode()
 
 class OKXClient:
-    def __init__(self, key, secret, passphrase, account="trade", timeout=10, simulated: bool | None = None):
+    def __init__(
+        self,
+        key,
+        secret,
+        passphrase,
+        account="trade",
+        timeout=10,
+        simulated: bool | None = None,
+        max_retries: int = 3,
+        backoff: float = 1.0,
+    ):
         self.key, self.secret, self.passphrase = key, secret, passphrase
         self.account = account
-        self.simulated = simulated if simulated is not None else (os.getenv("OKX_SIMULATED","0") == "1")
+        self.simulated = simulated if simulated is not None else (os.getenv("OKX_SIMULATED", "0") == "1")
         self.rest = httpx.Client(base_url=OKX_REST, timeout=timeout)
+        self.max_retries = max_retries
+        self.backoff = backoff
 
     def _headers(self, method, path, body):
         ts = str(int(time.time()))
@@ -29,14 +41,39 @@ class OKXClient:
             h["x-simulated-trading"] = "1"
         return h
 
+    def _sleep(self, attempt: int):
+        time.sleep(self.backoff * (2 ** attempt))
+
     def get(self, path, params=None):
-        r = self.rest.get(path, headers=self._headers("GET", path, ""), params=params or {})
-        r.raise_for_status(); return r.json()
+        for attempt in range(self.max_retries):
+            r = self.rest.get(path, headers=self._headers("GET", path, ""), params=params or {})
+            if r.status_code == 429 or r.status_code >= 500:
+                self._sleep(attempt)
+                continue
+            try:
+                r.raise_for_status()
+                return r.json()
+            except httpx.HTTPError:
+                if attempt == self.max_retries - 1:
+                    raise
+                self._sleep(attempt)
+        raise RuntimeError("max retries exceeded")
 
     def post(self, path, payload: dict):
         body = json.dumps(payload)
-        r = self.rest.post(path, headers=self._headers("POST", path, body), content=body)
-        r.raise_for_status(); return r.json()
+        for attempt in range(self.max_retries):
+            r = self.rest.post(path, headers=self._headers("POST", path, body), content=body)
+            if r.status_code == 429 or r.status_code >= 500:
+                self._sleep(attempt)
+                continue
+            try:
+                r.raise_for_status()
+                return r.json()
+            except httpx.HTTPError:
+                if attempt == self.max_retries - 1:
+                    raise
+                self._sleep(attempt)
+        raise RuntimeError("max retries exceeded")
 
     # ---- Convenience ----
     def get_balance(self, ccy="USDT"):
