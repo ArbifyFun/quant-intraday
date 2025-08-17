@@ -1,5 +1,4 @@
-import os
-import os, json, hmac, time, base64, asyncio, hashlib, httpx, websockets
+import os, json, hmac, time, base64, asyncio, hashlib, websockets
 import numpy as np, pandas as pd
 from dataclasses import dataclass, field
 from typing import Optional, Deque, Dict
@@ -22,6 +21,7 @@ from .optimizer import ExecOptimizer
 from .pov_executor import POVExecutor
 from .lob_executor import LOBExecutor
 from .autoexec import AutoExecutor
+from ..utils.notifier import send_tg, send_feishu
 
 OKX_WSS_PUBLIC = "wss://ws.okx.com:8443/ws/v5/public"
 
@@ -35,19 +35,6 @@ def okx_sign(ts: str, method: str, path: str, body: str, secret: str) -> str:
     mac = hmac.new(secret.encode(), msg, hashlib.sha256).digest()
     return base64.b64encode(mac).decode()
 
-def send_tg(text: str):
-    tok=os.getenv("TELEGRAM_BOT_TOKEN"); chat=os.getenv("TELEGRAM_CHAT_ID")
-    if not tok or not chat: return
-    try:
-        httpx.post(f"https://api.telegram.org/bot{tok}/sendMessage", data={"chat_id":chat,"text":text}, timeout=5.0)
-    except Exception: pass
-
-def send_feishu(text: str):
-    url=os.getenv("FEISHU_WEBHOOK_URL")
-    if not url: return
-    try:
-        httpx.post(url, json={"msg_type":"text","content":{"text":text}}, timeout=5.0)
-    except Exception: pass
 
 @dataclass
 class Candle:
